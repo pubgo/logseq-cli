@@ -6,6 +6,11 @@ import (
 
 	"github.com/pubgo/logseq-cli/cmds"
 	"github.com/pubgo/redant"
+	"github.com/pubgo/redant/cmds/completioncmd"
+	"github.com/pubgo/redant/cmds/doccmd"
+	"github.com/pubgo/redant/cmds/llmstxtcmd"
+	"github.com/pubgo/redant/cmds/mcpcmd"
+	"github.com/pubgo/redant/cmds/webcmd"
 )
 
 func main() {
@@ -50,9 +55,14 @@ func main() {
 			cmds.GraphCmd(),
 			cmds.QueryCmd(),
 			cmds.SearchCmd(),
+			llmstxtcmd.New(),
+			doccmd.New(),
 		},
 	}
 
+	webcmd.AddWebCommand(&root)
+	mcpcmd.AddMCPCommand(&root)
+	completioncmd.AddCompletionCommand(&root)
 	if err := root.Invoke().WithOS().Run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
