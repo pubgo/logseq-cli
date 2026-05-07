@@ -1,0 +1,2 @@
+# logseq-cli
+logseq cli
