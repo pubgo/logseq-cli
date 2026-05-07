@@ -2,6 +2,8 @@ module github.com/pubgo/logseq-cli
 
 go 1.26.1
 
+replace github.com/pubgo/redant v0.3.0 => /Users/barry/git/redant
+
 require github.com/pubgo/redant v0.3.0
 
 require (

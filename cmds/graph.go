@@ -2,8 +2,9 @@ package cmds
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 
+	"github.com/pubgo/logseq-cli/pkg/logseq"
 	"github.com/pubgo/redant"
 )
 
@@ -15,14 +16,10 @@ func GraphCmd() *redant.Command {
 			{
 				Use:   "info",
 				Short: "Get current graph info",
-				Handler: func(ctx context.Context, inv *redant.Invocation) error {
+				ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) (*logseq.GraphInfo, error) {
 					client := NewClient()
-					info, err := client.GetCurrentGraph(ctx)
-					if err != nil {
-						return err
-					}
-					return PrintJSON(info)
-				},
+					return client.GetCurrentGraph(ctx)
+				}),
 			},
 		},
 	}
@@ -36,33 +33,37 @@ func QueryCmd() *redant.Command {
 			{
 				Use:   "datalog <query>",
 				Short: "Execute Datalog query",
+				Args: redant.ArgSet{
+					{Name: "query", Required: true, Value: redant.StringOf(new(string)), Description: "Datalog query string"},
+				},
 				Handler: func(ctx context.Context, inv *redant.Invocation) error {
-					if len(inv.Args) == 0 {
-						return fmt.Errorf("datalog query required")
-					}
 					client := NewClient()
 					result, err := client.DatascriptQuery(ctx, inv.Args[0])
 					if err != nil {
 						return err
 					}
-					fmt.Fprintln(inv.Stdout, string(result))
-					return nil
+					var buf json.RawMessage = result
+					enc := json.NewEncoder(inv.Stdout)
+					enc.SetIndent("", "  ")
+					return enc.Encode(buf)
 				},
 			},
 			{
 				Use:   "dsl <query>",
 				Short: "Execute Logseq DSL query",
+				Args: redant.ArgSet{
+					{Name: "query", Required: true, Value: redant.StringOf(new(string)), Description: "DSL query string"},
+				},
 				Handler: func(ctx context.Context, inv *redant.Invocation) error {
-					if len(inv.Args) == 0 {
-						return fmt.Errorf("DSL query required")
-					}
 					client := NewClient()
 					result, err := client.DSLQuery(ctx, inv.Args[0])
 					if err != nil {
 						return err
 					}
-					fmt.Fprintln(inv.Stdout, string(result))
-					return nil
+					var buf json.RawMessage = result
+					enc := json.NewEncoder(inv.Stdout)
+					enc.SetIndent("", "  ")
+					return enc.Encode(buf)
 				},
 			},
 		},
@@ -73,16 +74,12 @@ func SearchCmd() *redant.Command {
 	return &redant.Command{
 		Use:   "search <query>",
 		Short: "Full-text search",
-		Handler: func(ctx context.Context, inv *redant.Invocation) error {
-			if len(inv.Args) == 0 {
-				return fmt.Errorf("search query required")
-			}
-			client := NewClient()
-			result, err := client.Search(ctx, inv.Args[0])
-			if err != nil {
-				return err
-			}
-			return PrintJSON(result)
+		Args: redant.ArgSet{
+			{Name: "query", Required: true, Value: redant.StringOf(new(string)), Description: "Search query"},
 		},
+		ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) (*logseq.SearchResult, error) {
+			client := NewClient()
+			return client.Search(ctx, inv.Args[0])
+		}),
 	}
 }

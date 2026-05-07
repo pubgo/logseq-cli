@@ -2,6 +2,7 @@ package cmds
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/pubgo/logseq-cli/pkg/logseq"
@@ -26,14 +27,10 @@ func pageListCmd() *redant.Command {
 	return &redant.Command{
 		Use:   "list",
 		Short: "List all pages",
-		Handler: func(ctx context.Context, inv *redant.Invocation) error {
+		ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) ([]logseq.Page, error) {
 			client := NewClient()
-			pages, err := client.GetAllPages(ctx)
-			if err != nil {
-				return err
-			}
-			return PrintJSON(pages)
-		},
+			return client.GetAllPages(ctx)
+		}),
 	}
 }
 
@@ -42,6 +39,9 @@ func pageGetCmd() *redant.Command {
 	return &redant.Command{
 		Use:   "get <name>",
 		Short: "Get page info",
+		Args: redant.ArgSet{
+			{Name: "name", Required: true, Value: redant.StringOf(new(string)), Description: "Page name"},
+		},
 		Options: redant.OptionSet{
 			{
 				Flag:        "blocks",
@@ -51,18 +51,18 @@ func pageGetCmd() *redant.Command {
 			},
 		},
 		Handler: func(ctx context.Context, inv *redant.Invocation) error {
-			if len(inv.Args) == 0 {
-				return fmt.Errorf("page name required")
-			}
 			client := NewClient()
 			name := inv.Args[0]
+
+			enc := json.NewEncoder(inv.Stdout)
+			enc.SetIndent("", "  ")
 
 			if withBlocks {
 				blocks, err := client.GetPageBlocksTree(ctx, name)
 				if err != nil {
 					return err
 				}
-				return PrintJSON(blocks)
+				return enc.Encode(blocks)
 			}
 
 			page, err := client.GetPage(ctx, name)
@@ -72,7 +72,7 @@ func pageGetCmd() *redant.Command {
 			if page == nil {
 				return fmt.Errorf("page '%s' not found", name)
 			}
-			return PrintJSON(page)
+			return enc.Encode(page)
 		},
 	}
 }
@@ -81,19 +81,15 @@ func pageCreateCmd() *redant.Command {
 	return &redant.Command{
 		Use:   "create <name>",
 		Short: "Create a page",
-		Handler: func(ctx context.Context, inv *redant.Invocation) error {
-			if len(inv.Args) == 0 {
-				return fmt.Errorf("page name required")
-			}
+		Args: redant.ArgSet{
+			{Name: "name", Required: true, Value: redant.StringOf(new(string)), Description: "Page name"},
+		},
+		ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) (*logseq.Page, error) {
 			client := NewClient()
-			page, err := client.CreatePage(ctx, inv.Args[0], nil, &logseq.CreatePageOptions{
+			return client.CreatePage(ctx, inv.Args[0], nil, &logseq.CreatePageOptions{
 				CreateFirstBlock: true,
 			})
-			if err != nil {
-				return err
-			}
-			return PrintJSON(page)
-		},
+		}),
 	}
 }
 
@@ -101,17 +97,16 @@ func pageDeleteCmd() *redant.Command {
 	return &redant.Command{
 		Use:   "delete <name>",
 		Short: "Delete a page",
-		Handler: func(ctx context.Context, inv *redant.Invocation) error {
-			if len(inv.Args) == 0 {
-				return fmt.Errorf("page name required")
-			}
+		Args: redant.ArgSet{
+			{Name: "name", Required: true, Value: redant.StringOf(new(string)), Description: "Page name"},
+		},
+		ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) (StatusResult, error) {
 			client := NewClient()
 			if err := client.DeletePage(ctx, inv.Args[0]); err != nil {
-				return err
+				return StatusResult{}, err
 			}
-			fmt.Fprintf(inv.Stdout, "deleted page: %s\n", inv.Args[0])
-			return nil
-		},
+			return StatusResult{OK: true, Message: "deleted page: " + inv.Args[0]}, nil
+		}),
 	}
 }
 
@@ -119,16 +114,16 @@ func pageRenameCmd() *redant.Command {
 	return &redant.Command{
 		Use:   "rename <old-name> <new-name>",
 		Short: "Rename a page",
-		Handler: func(ctx context.Context, inv *redant.Invocation) error {
-			if len(inv.Args) < 2 {
-				return fmt.Errorf("old name and new name required")
-			}
+		Args: redant.ArgSet{
+			{Name: "old-name", Required: true, Value: redant.StringOf(new(string)), Description: "Current page name"},
+			{Name: "new-name", Required: true, Value: redant.StringOf(new(string)), Description: "New page name"},
+		},
+		ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) (StatusResult, error) {
 			client := NewClient()
 			if err := client.RenamePage(ctx, inv.Args[0], inv.Args[1]); err != nil {
-				return err
+				return StatusResult{}, err
 			}
-			fmt.Fprintf(inv.Stdout, "renamed: %s -> %s\n", inv.Args[0], inv.Args[1])
-			return nil
-		},
+			return StatusResult{OK: true, Message: "renamed: " + inv.Args[0] + " -> " + inv.Args[1]}, nil
+		}),
 	}
 }
