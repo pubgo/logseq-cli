@@ -13,12 +13,35 @@
 
   <div class="max-w-7xl mx-auto p-4 md:p-6 space-y-4" x-data="logseqApp()" x-init="init()">
 
+    <!-- Toast -->
+    <div x-show="toast.show" x-transition.opacity.duration.300ms
+      class="fixed top-4 right-4 z-50 max-w-sm px-4 py-3 rounded-lg shadow-lg text-sm border"
+      :class="toast.ok ? 'bg-emerald-900/90 border-emerald-700 text-emerald-100' : 'bg-rose-900/90 border-rose-700 text-rose-100'"
+      x-text="toast.msg" @click="toast.show=false"></div>
+
+    <!-- Loading overlay -->
+    <div x-show="loading" class="fixed inset-0 z-40 flex items-start justify-center pt-20 pointer-events-none">
+      <div
+        class="px-4 py-2 rounded-lg bg-slate-800/90 border border-slate-600 text-sm text-slate-200 flex items-center gap-2 shadow-lg">
+        <svg class="animate-spin h-4 w-4 text-indigo-400" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+        <span x-text="loadingMsg||'加载中...'"></span>
+      </div>
+    </div>
+
     <!-- Header -->
     <header class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 class="text-lg md:text-xl font-semibold">logseq-cli WebUI</h1>
-          <p class="text-sm text-slate-400 mt-1">页面 · 块 · 搜索 · 查询 · 系统</p>
+        <div class="flex items-center gap-3">
+          <div class="w-2.5 h-2.5 rounded-full"
+            :class="connOk ? 'bg-emerald-400 shadow-lg shadow-emerald-400/30' : 'bg-rose-500 shadow-lg shadow-rose-500/30'">
+          </div>
+          <div>
+            <h1 class="text-lg md:text-xl font-semibold">logseq-cli WebUI</h1>
+            <p class="text-xs text-slate-500 mt-0.5">⌘K 搜索 · ⌘1-6 切换标签页</p>
+          </div>
         </div>
         <template x-if="conn">
           <pre class="text-xs text-slate-500 bg-slate-950 rounded px-2 py-1 border border-slate-800"
@@ -27,12 +50,25 @@
       </div>
     </header>
 
+    <!-- Page name datalist -->
+    <datalist id="page-names">
+      <template x-for="p in pageList" :key="p.uuid||p.name">
+        <option :value="p.originalName||p.name"></option>
+      </template>
+    </datalist>
+
     <!-- Tab Nav -->
     <nav class="flex flex-wrap gap-1 border-b border-slate-700">
       <template x-for="t in tabs" :key="t.key">
-        <button class="px-4 py-2 text-sm rounded-t-lg border border-b-0 transition-colors cursor-pointer"
+        <button
+          class="px-4 py-2 text-sm rounded-t-lg border border-b-0 transition-colors cursor-pointer flex items-center gap-1.5"
           :class="activeTab===t.key ? 'bg-slate-800 text-white border-slate-600' : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'"
-          @click="activeTab=t.key" x-text="t.label"></button>
+          @click="activeTab=t.key">
+          <span x-text="t.label"></span>
+          <span x-show="tabBadge(t.key)"
+            class="px-1.5 py-0.5 rounded-full text-[10px] leading-none bg-slate-700 text-slate-300"
+            x-text="tabBadge(t.key)"></span>
+        </button>
       </template>
     </nav>
 
@@ -85,7 +121,8 @@
           <div class="text-xs text-slate-400" x-text="pageSummary"></div>
           <div class="space-y-0.5 max-h-[500px] overflow-auto pr-1">
             <template x-for="p in pageList" :key="p.uuid||p.name">
-              <button class="w-full text-left px-2 py-1 rounded hover:bg-slate-800 text-sm truncate"
+              <button class="w-full text-left px-2 py-1.5 rounded text-sm truncate transition-colors"
+                :class="currentPage===(p.originalName||p.name) ? 'bg-indigo-800/40 text-indigo-200 border-l-2 border-indigo-400 pl-1.5' : 'hover:bg-slate-800'"
                 :title="p.originalName||p.name" @click="currentPage=p.originalName||p.name;loadPage()"
                 x-text="p.originalName||p.name||'(unnamed)'"></button>
             </template>
@@ -101,12 +138,13 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
               <div class="space-y-1">
                 <label class="text-slate-400 text-xs">当前页面</label>
-                <input x-model="currentPage" @keydown.enter="loadPage()"
-                  class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700" />
+                <input x-model="currentPage" @keydown.enter="loadPage()" list="page-names"
+                  class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700" placeholder="输入或选择页面" />
               </div>
               <div class="space-y-1">
                 <label class="text-slate-400 text-xs">新建页面名</label>
-                <input x-model="newPageName" class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700" />
+                <input x-model="newPageName" @keydown.enter="createPage()"
+                  class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700" placeholder="回车创建" />
               </div>
             </div>
             <div class="flex flex-wrap gap-2">
@@ -114,16 +152,27 @@
                 @click="loadPage()">加载详情</button>
               <button class="px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600 text-sm"
                 @click="createPage()">创建页面</button>
+              <button class="px-3 py-1.5 rounded bg-emerald-700/60 hover:bg-emerald-600/60 text-sm"
+                @click="showCreateWithContent=!showCreateWithContent"
+                x-text="showCreateWithContent?'收起内容':'带内容创建'"></button>
               <button class="px-3 py-1.5 rounded bg-rose-700 hover:bg-rose-600 text-sm"
                 @click="deletePage()">删除页面</button>
+            </div>
+
+            <!-- Create with initial content -->
+            <div x-show="showCreateWithContent" x-transition class="border-t border-slate-800 pt-3 space-y-2">
+              <span class="text-xs text-slate-400">初始内容（创建页面时附带）</span>
+              <textarea x-model="createPageContent" rows="2"
+                class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm"
+                placeholder="页面初始内容（Markdown）"></textarea>
             </div>
 
             <!-- Rename -->
             <div class="border-t border-slate-800 pt-3 space-y-2">
               <span class="text-xs text-slate-400">重命名</span>
               <div class="flex gap-2 text-sm">
-                <input x-model="renameNewName" class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700"
-                  placeholder="新页面名" />
+                <input x-model="renameNewName" @keydown.enter="renamePage()"
+                  class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700" placeholder="新页面名 (Enter 确认)" />
                 <button class="px-3 py-1.5 rounded bg-amber-700 hover:bg-amber-600 text-sm"
                   @click="renamePage()">重命名</button>
               </div>
@@ -160,6 +209,44 @@
             </div>
           </div>
 
+          <!-- Page blocks tree -->
+          <div x-show="pageBlocks.length" class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="font-semibold text-sm">页面块树 <span class="text-slate-400 font-normal"
+                  x-text="'('+pageBlocks.length+' 块)'"></span></span>
+              <button class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600"
+                @click="pageBlocks=[]">收起</button>
+            </div>
+            <div class="space-y-1 max-h-[400px] overflow-auto">
+              <template x-for="(b,i) in pageBlocks" :key="b.uuid||i">
+                <div class="rounded border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm"
+                  :style="'margin-left:'+(b.level||0)*16+'px'">
+                  <div class="flex items-start gap-2">
+                    <div class="flex-1 min-w-0">
+                      <div class="text-slate-200 whitespace-pre-wrap break-words" x-text="b.content||'(空块)'"></div>
+                      <div class="flex items-center gap-2 mt-1">
+                        <code
+                          class="text-[10px] text-slate-500 bg-slate-900 px-1 rounded cursor-pointer hover:text-indigo-300 select-all"
+                          :title="'点击复制 UUID'" @click="copyUUID(b.uuid)" x-text="b.uuid?.slice(0,8)+'...'"></code>
+                        <template x-if="b.marker"><span class="text-[10px] px-1 rounded"
+                            :class="b.marker==='DONE'?'bg-emerald-900 text-emerald-300':'bg-amber-900 text-amber-300'"
+                            x-text="b.marker"></span></template>
+                        <template x-if="b.priority"><span class="text-[10px] px-1 rounded bg-rose-900 text-rose-300"
+                            x-text="'P'+b.priority"></span></template>
+                      </div>
+                    </div>
+                    <div class="flex gap-1 shrink-0">
+                      <button class="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 hover:bg-slate-600"
+                        @click="fillBlockUUID(b.uuid)" title="填入块操作">→块</button>
+                      <button class="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 hover:bg-slate-600"
+                        @click="block.insertTarget=b.uuid;activeTab='blocks'" title="在此块下插入">+子</button>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+
           <!-- Append / Prepend -->
           <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
             <span class="font-semibold text-sm">追加内容到页面</span>
@@ -171,6 +258,10 @@
                 @click="appendBlock()">追加到页尾</button>
               <button class="px-3 py-1.5 rounded bg-cyan-700 hover:bg-cyan-600 text-sm"
                 @click="prependBlock()">插入到页首</button>
+              <label class="inline-flex items-center gap-1 text-xs text-slate-400">
+                <input type="checkbox" x-model="autoRefreshBlocks" />
+                追加后刷新块树
+              </label>
             </div>
           </div>
 
@@ -186,12 +277,28 @@
         <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
           <span class="font-semibold text-sm">获取块</span>
           <div class="flex gap-2 text-sm">
-            <input x-model="block.getUUID" class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700"
-              placeholder="块 UUID" />
+            <input x-model="block.getUUID" @keydown.enter="getBlock()"
+              class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700" placeholder="块 UUID (Enter 获取)" />
             <label class="inline-flex items-center gap-1 text-xs"><input type="checkbox"
                 x-model="block.getChildren" />子块</label>
             <button class="px-3 py-1.5 rounded bg-blue-700 hover:bg-blue-600" @click="getBlock()">获取</button>
           </div>
+          <!-- Block preview after get -->
+          <template x-if="blockPreview">
+            <div class="rounded border border-slate-800 bg-slate-950/60 p-2 space-y-1">
+              <div class="text-xs text-slate-400">块预览</div>
+              <div class="text-sm text-slate-200 whitespace-pre-wrap break-words" x-text="blockPreview.content||'(空)'">
+              </div>
+              <div class="flex gap-2 mt-1">
+                <button class="text-[10px] px-2 py-0.5 rounded bg-amber-700 hover:bg-amber-600"
+                  @click="block.updateUUID=blockPreview.uuid;block.updateContent=blockPreview.content">→编辑</button>
+                <button class="text-[10px] px-2 py-0.5 rounded bg-emerald-700 hover:bg-emerald-600"
+                  @click="block.insertTarget=blockPreview.uuid">→插入子块</button>
+                <code class="text-[10px] text-slate-500 cursor-pointer hover:text-indigo-300"
+                  @click="copyUUID(blockPreview.uuid)" x-text="blockPreview.uuid"></code>
+              </div>
+            </div>
+          </template>
         </div>
 
         <!-- Insert block -->
@@ -282,10 +389,40 @@
         <span class="font-semibold text-sm">全文搜索</span>
         <div class="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm">
           <input x-model="searchQ" @keydown.enter="doSearch()"
-            class="md:col-span-2 px-3 py-2 rounded bg-slate-950 border border-slate-700" placeholder="关键词" />
+            class="md:col-span-2 px-3 py-2 rounded bg-slate-950 border border-slate-700" placeholder="关键词 (Enter 搜索)" />
           <input x-model="searchTag" class="px-3 py-2 rounded bg-slate-950 border border-slate-700"
             placeholder="标签过滤（可选）" />
           <button class="px-3 py-2 rounded bg-violet-700 hover:bg-violet-600" @click="doSearch()">搜索</button>
+        </div>
+      </div>
+
+      <!-- Structured search results -->
+      <div x-show="searchResults.length" class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <span class="font-semibold text-sm">搜索结果 <span class="text-slate-400 font-normal"
+              x-text="'('+searchResults.length+' 条)'"></span></span>
+          <button class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600"
+            @click="searchResults=[]">清空</button>
+        </div>
+        <div class="space-y-1 max-h-[500px] overflow-auto">
+          <template x-for="(r,i) in searchResults" :key="i">
+            <div
+              class="rounded border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm hover:bg-slate-800/60 cursor-pointer"
+              @click="searchResultClick(r)">
+              <div class="flex items-center gap-2">
+                <span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded"
+                  :class="r.type==='page'?'bg-blue-900 text-blue-300':'bg-purple-900 text-purple-300'"
+                  x-text="r.type==='page'?'页面':'块'"></span>
+                <span class="font-medium truncate" x-text="r.title||r.content||'(无标题)'"></span>
+              </div>
+              <template x-if="r.snippet">
+                <div class="text-xs text-slate-400 mt-1 line-clamp-2" x-text="r.snippet"></div>
+              </template>
+              <template x-if="r.uuid">
+                <code class="text-[10px] text-slate-500 mt-1 block" x-text="r.uuid"></code>
+              </template>
+            </div>
+          </template>
         </div>
       </div>
     </div>
@@ -365,9 +502,24 @@
     <div x-show="activeTab==='query'" x-transition class="space-y-4">
       <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
         <span class="font-semibold text-sm">Datalog / DSL 查询</span>
-        <textarea x-model="queryText" rows="5"
+        <textarea x-model="queryText" rows="5" @keydown.ctrl.enter="runDatalog()" @keydown.meta.enter="runDatalog()"
           class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm font-mono"
-          placeholder="[:find ?p :where [?b :block/name ?p]]"></textarea>
+          placeholder="[:find ?p :where [?b :block/name ?p]]  (⌘Enter 执行 Datalog)"></textarea>
+
+        <!-- Query history -->
+        <div x-show="queryHistory.length" class="rounded border border-slate-800 bg-slate-950/60 p-3 space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="text-xs text-slate-300">最近查询</div>
+            <button class="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 hover:bg-slate-600"
+              @click="queryHistory=[]">清空</button>
+          </div>
+          <div class="flex flex-wrap gap-1">
+            <template x-for="(qh,qi) in queryHistory" :key="qi">
+              <button class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-mono truncate max-w-[200px]"
+                @click="queryText=qh" :title="qh" x-text="qh.slice(0,40)+(qh.length>40?'...':'')"></button>
+            </template>
+          </div>
+        </div>
 
         <div class="rounded border border-slate-800 bg-slate-950/60 p-3 space-y-2">
           <div class="text-xs text-slate-300">Datalog 示例</div>
@@ -387,8 +539,8 @@
         </div>
 
         <div class="flex gap-2">
-          <button class="px-3 py-2 rounded bg-teal-700 hover:bg-teal-600 text-sm" @click="runDatalog()">执行
-            Datalog</button>
+          <button class="px-3 py-2 rounded bg-teal-700 hover:bg-teal-600 text-sm" @click="runDatalog()">执行 Datalog <span
+              class="text-[10px] text-teal-300/60">⌘↵</span></button>
           <button class="px-3 py-2 rounded bg-sky-700 hover:bg-sky-600 text-sm" @click="runDSL()">执行 DSL</button>
         </div>
       </div>
@@ -447,9 +599,15 @@
     <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
       <div class="flex items-center justify-between mb-2">
         <span class="font-semibold text-sm">输出</span>
-        <button class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600" @click="copyOutput()">复制</button>
+        <div class="flex gap-2">
+          <button class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600" @click="output='(暂无)'">清空</button>
+          <button class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600" @click="copyOutput()">复制</button>
+          <button class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600"
+            @click="downloadOutput()">下载</button>
+        </div>
       </div>
-      <pre class="text-xs bg-slate-950 border border-slate-800 rounded p-3 overflow-auto max-h-[500px]"
+      <pre
+        class="text-xs bg-slate-950 border border-slate-800 rounded p-3 overflow-auto max-h-[500px] whitespace-pre-wrap break-words"
         x-text="output"></pre>
     </div>
 
@@ -464,9 +622,20 @@
           { key: 'search', label: '搜索' }, { key: 'tags', label: '标签' }, { key: 'query', label: '查询' }, { key: 'system', label: '系统' },
         ],
         conn: null,
+        connOk: false,
         output: '(暂无)',
+        loading: false,
+        loadingMsg: '',
+        toast: { show: false, ok: true, msg: '' },
         history: [],
         pageList: [],
+        pageBlocks: [],
+        blockPreview: null,
+        searchResults: [],
+        showCreateWithContent: false,
+        createPageContent: '',
+        autoRefreshBlocks: true,
+        queryHistory: [],
         tagList: [],
         pageSummary: '',
         currentPage: '',
@@ -500,10 +669,36 @@
         async init() {
           this.exampleDesc = this.datalogExamples[0]?.desc || '';
           await Promise.all([this.loadConn(false), this.loadTags(false), this.refreshPages(false)]);
+          // Keyboard shortcuts
+          document.addEventListener('keydown', (e) => {
+            const isMod = e.metaKey || e.ctrlKey;
+            if (isMod && e.key === 'k') { e.preventDefault(); this.activeTab = 'search'; this.$nextTick(() => document.querySelector('[x-model="searchQ"]')?.focus()); }
+            if (isMod && e.key >= '1' && e.key <= '6') { e.preventDefault(); const t = this.tabs[parseInt(e.key) - 1]; if (t) this.activeTab = t.key; }
+          });
         },
 
         print(d) { this.output = typeof d === 'string' ? d : JSON.stringify(d, null, 2); },
         now() { return new Date().toLocaleTimeString('zh-CN', { hour12: false }); },
+        showToast(msg, ok = true) {
+          this.toast = { show: true, ok, msg };
+          setTimeout(() => this.toast.show = false, ok ? 2000 : 4000);
+        },
+        tabBadge(key) {
+          if (key === 'pages') return this.pageList.length || '';
+          if (key === 'tags') return this.tagListAll.length || '';
+          return '';
+        },
+        copyUUID(uuid) {
+          if (!uuid) return;
+          navigator.clipboard.writeText(uuid).then(() => this.showToast('UUID 已复制: ' + uuid.slice(0, 8) + '...'));
+        },
+        fillBlockUUID(uuid) {
+          this.block.getUUID = uuid;
+          this.block.updateUUID = uuid;
+          this.block.propUUID = uuid;
+          this.block.collapseUUID = uuid;
+          this.showToast('UUID 已填入块操作区');
+        },
         addHistory(action, req, ok, result) {
           this.history.unshift({ time: this.now(), action, req, ok, result });
           if (this.history.length > 30) this.history.length = 30;
@@ -520,8 +715,10 @@
         },
 
         async run(action, req, fn) {
-          try { const d = await fn(); this.print(d); this.addHistory(action, req, true, d); return d; }
-          catch (e) { this.print(action + '失败: ' + e.message); this.addHistory(action, req, false, e.message); return null; }
+          this.loading = true; this.loadingMsg = action + '...';
+          try { const d = await fn(); this.print(d); this.addHistory(action, req, true, d); this.showToast(action + ' ✓'); return d; }
+          catch (e) { this.print(action + '失败: ' + e.message); this.addHistory(action, req, false, e.message); this.showToast(action + ' 失败', false); return null; }
+          finally { this.loading = false; this.loadingMsg = ''; }
         },
 
         async replay(idx) {
@@ -531,14 +728,21 @@
           await this.run(h.action + '（回放）', req, () => this.api(req.url, opts));
         },
 
-        copyOutput() { navigator.clipboard.writeText(this.output).then(() => this.output = '已复制到剪贴板').catch(() => { }); },
+        copyOutput() { navigator.clipboard.writeText(this.output).then(() => this.showToast('已复制到剪贴板')).catch(() => { }); },
+
+        downloadOutput() {
+          const blob = new Blob([this.output], { type: 'application/json' });
+          const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+          a.download = 'logseq-output-' + Date.now() + '.json'; a.click();
+          URL.revokeObjectURL(a.href);
+        },
 
         async loadConn(record = true, toPrint = false) {
           const req = { method: 'GET', url: '/api/connection' };
           try {
-            const d = await this.api(req.url); this.conn = d;
+            const d = await this.api(req.url); this.conn = d; this.connOk = true;
             if (toPrint) this.print(d); if (record) this.addHistory('连接信息', req, true, d);
-          } catch (e) { if (record) this.addHistory('连接信息', req, false, e.message); }
+          } catch (e) { this.connOk = false; if (record) this.addHistory('连接信息', req, false, e.message); }
         },
 
         async loadTags(record = true) {
@@ -577,21 +781,44 @@
         async loadPage() {
           if (!this.currentPage) { this.print('请输入页面名'); return; }
           const req = { method: 'GET', url: '/api/page?name=' + encodeURIComponent(this.currentPage) };
-          await this.run('加载页面', req, () => this.api(req.url));
+          const d = await this.run('加载页面', req, () => this.api(req.url));
+          if (d) this.parsePageBlocks(d);
+        },
+
+        parsePageBlocks(data) {
+          this.pageBlocks = [];
+          const walk = (blocks, level) => {
+            if (!Array.isArray(blocks)) return;
+            for (const b of blocks) {
+              this.pageBlocks.push({
+                uuid: b.uuid || b.id,
+                content: b.content || '',
+                marker: b.marker || '',
+                priority: b.priority || '',
+                level,
+              });
+              if (b.children) walk(b.children, level + 1);
+            }
+          };
+          if (Array.isArray(data)) walk(data, 0);
+          else if (data?.children) walk(data.children, 0);
+          else if (data?.['block/children']) walk(data['block/children'], 0);
         },
 
         async createPage() {
           if (!this.newPageName) { this.print('请输入页面名'); return; }
-          const req = { method: 'POST', url: '/api/page', body: JSON.stringify({ name: this.newPageName }) };
+          const body = { name: this.newPageName };
+          if (this.createPageContent.trim()) body.content = this.createPageContent;
+          const req = { method: 'POST', url: '/api/page', body: JSON.stringify(body) };
           const d = await this.run('创建页面', req, () => this.api(req.url, { method: 'POST', body: req.body }));
-          if (d) { this.currentPage = this.newPageName; this.refreshPages(false); }
+          if (d) { this.currentPage = this.newPageName; this.newPageName = ''; this.createPageContent = ''; this.showCreateWithContent = false; this.refreshPages(false); }
         },
 
         async deletePage() {
           if (!this.currentPage || !confirm('确认删除: ' + this.currentPage + ' ?')) return;
           const req = { method: 'DELETE', url: '/api/page?name=' + encodeURIComponent(this.currentPage) };
           await this.run('删除页面', req, () => this.api(req.url, { method: 'DELETE' }));
-          this.refreshPages(false);
+          this.currentPage = ''; this.pageBlocks = []; this.refreshPages(false);
         },
 
         async renamePage() {
@@ -636,20 +863,25 @@
           if (!this.currentPage || !this.appendText.trim()) { this.print('需要页面名和内容'); return; }
           const req = { method: 'POST', url: '/api/block/append', body: JSON.stringify({ page: this.currentPage, content: this.appendText }) };
           const d = await this.run('追加块', req, () => this.api(req.url, { method: 'POST', body: req.body }));
-          if (d?.uuid) this.block.updateUUID = d.uuid;
+          if (d?.uuid) { this.block.updateUUID = d.uuid; this.appendText = ''; }
+          if (d && this.autoRefreshBlocks) this.loadPage();
         },
 
         async prependBlock() {
           if (!this.currentPage || !this.appendText.trim()) { this.print('需要页面名和内容'); return; }
           const req = { method: 'POST', url: '/api/block/prepend', body: JSON.stringify({ page: this.currentPage, content: this.appendText }) };
           const d = await this.run('插入页首', req, () => this.api(req.url, { method: 'POST', body: req.body }));
-          if (d?.uuid) this.block.updateUUID = d.uuid;
+          if (d?.uuid) { this.block.updateUUID = d.uuid; this.appendText = ''; }
+          if (d && this.autoRefreshBlocks) this.loadPage();
         },
 
         async getBlock() {
           if (!this.block.getUUID) { this.print('请输入UUID'); return; }
           const req = { method: 'GET', url: '/api/block?uuid=' + encodeURIComponent(this.block.getUUID) + '&children=' + this.block.getChildren };
-          await this.run('获取块', req, () => this.api(req.url));
+          const d = await this.run('获取块', req, () => this.api(req.url));
+          if (d) {
+            this.blockPreview = { uuid: d.uuid || this.block.getUUID, content: d.content || d['block/content'] || '' };
+          }
         },
 
         async insertBlock() {
@@ -744,7 +976,40 @@
           if (!this.searchQ) { this.print('请输入关键词'); return; }
           const p = new URLSearchParams(); p.set('q', this.searchQ); if (this.searchTag) p.set('tag', this.searchTag);
           const req = { method: 'GET', url: '/api/search?' + p.toString() };
-          await this.run('搜索', req, () => this.api(req.url));
+          const d = await this.run('搜索', req, () => this.api(req.url));
+          this.parseSearchResults(d);
+        },
+
+        parseSearchResults(data) {
+          this.searchResults = [];
+          if (!data) return;
+          const pages = data.pages || data.Pages || [];
+          const blocks = data.blocks || data.Blocks || [];
+          for (const p of pages) {
+            this.searchResults.push({ type: 'page', title: typeof p === 'string' ? p : (p.originalName || p.name || p['original-name'] || ''), snippet: '', uuid: '' });
+          }
+          for (const b of blocks) {
+            const content = b.content || b['block/content'] || '';
+            this.searchResults.push({ type: 'block', title: content.slice(0, 80), snippet: content.length > 80 ? content : '', uuid: b.uuid || b['block/uuid'] || '', page: b.page?.name || b.page?.originalName || '' });
+          }
+          if (!this.searchResults.length && Array.isArray(data)) {
+            for (const item of data) {
+              if (typeof item === 'string') this.searchResults.push({ type: 'page', title: item, snippet: '', uuid: '' });
+              else this.searchResults.push({ type: item.uuid ? 'block' : 'page', title: item.content || item.originalName || item.name || '', snippet: '', uuid: item.uuid || '' });
+            }
+          }
+        },
+
+        searchResultClick(r) {
+          if (r.type === 'page') {
+            this.currentPage = r.title;
+            this.activeTab = 'pages';
+            this.loadPage();
+          } else if (r.uuid) {
+            this.fillBlockUUID(r.uuid);
+            this.activeTab = 'blocks';
+            this.getBlock();
+          }
         },
 
         currentExample() { return this.datalogExamples.find(e => e.key === this.selectedExample) || this.datalogExamples[0]; },
@@ -754,14 +1019,20 @@
           this.queryText = e.query; this.exampleDesc = e.desc;
         },
 
+        addQueryHistory(q) {
+          this.queryHistory = [q, ...this.queryHistory.filter(x => x !== q)].slice(0, 10);
+        },
+
         async runDatalog() {
           if (!this.queryText) { this.print('请输入查询'); return; }
+          this.addQueryHistory(this.queryText);
           const req = { method: 'POST', url: '/api/query/datalog', body: JSON.stringify({ query: this.queryText }) };
           await this.run('Datalog', req, () => this.api(req.url, { method: 'POST', body: req.body }));
         },
 
         async runDSL() {
           if (!this.queryText) { this.print('请输入查询'); return; }
+          this.addQueryHistory(this.queryText);
           const req = { method: 'POST', url: '/api/query/dsl', body: JSON.stringify({ query: this.queryText }) };
           await this.run('DSL', req, () => this.api(req.url, { method: 'POST', body: req.body }));
         },
