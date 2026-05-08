@@ -11,139 +11,417 @@
 <body class="bg-slate-950 text-slate-100 min-h-screen">
     <div class="max-w-7xl mx-auto p-4 md:p-6 space-y-4">
         <header class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-            <h1 class="text-lg md:text-xl font-semibold">logseq-cli 简易 Web 验证台</h1>
-            <p class="text-sm text-slate-400 mt-1">用于快速操作 Logseq 数据：页面、块、搜索、查询。内置最近操作回放，适合手工联调与回归验证。</p>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h1 class="text-lg md:text-xl font-semibold">logseq-cli 简易 Web 验证台</h1>
+                    <p class="text-sm text-slate-400 mt-1">用于快速操作 Logseq 数据：页面、块、搜索、查询。内置最近操作回放，适合手工联调与回归验证。</p>
+                </div>
+                <div class="flex gap-2">
+                    <button id="btnExpandAll"
+                        class="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-sm">全部展开</button>
+                    <button id="btnCollapseAll"
+                        class="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-sm">全部收起</button>
+                </div>
+            </div>
+        </header>
+
+        <details data-collapsible="true" open class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+            <summary class="font-semibold cursor-pointer select-none">系统与连接</summary>
+            <p class="text-xs text-slate-400 mt-2">用于检查服务状态、Graph 信息和当前生效的连接配置。</p>
             <div class="mt-3 flex flex-wrap gap-2">
                 <button id="btnHealth" class="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-sm">健康检查</button>
                 <button id="btnGraph" class="px-3 py-1.5 rounded bg-blue-700 hover:bg-blue-600 text-sm">获取 Graph
                     信息</button>
-                <button id="btnPages"
-                    class="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-sm">刷新页面列表</button>
                 <button id="btnConnection"
                     class="px-3 py-1.5 rounded bg-teal-700 hover:bg-teal-600 text-sm">连接信息</button>
             </div>
             <pre id="connectionInfo"
                 class="mt-3 text-xs bg-slate-950 border border-slate-800 rounded p-3 overflow-auto">(连接信息加载中...)</pre>
-        </header>
+        </details>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <section class="lg:col-span-1 rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
-                <h2 class="font-semibold">页面列表</h2>
-                <div class="text-xs text-slate-400">点击页面名查看详情（含块树）</div>
-                <div id="pages" class="space-y-1 max-h-[360px] overflow-auto pr-1"></div>
-            </section>
+            <details data-collapsible="true" open
+                class="lg:col-span-1 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                <summary class="font-semibold cursor-pointer select-none">页面列表</summary>
+                <div class="text-xs text-slate-400 mt-2">支持按标签与元数据过滤。点击页面名可查看详情（含块树）。</div>
 
-            <section class="lg:col-span-2 rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-4">
-                <h2 class="font-semibold">页面操作</h2>
+                <div class="mt-3 rounded border border-slate-800 bg-slate-950/60 p-3 space-y-2">
+                    <div class="text-xs text-slate-300">页面过滤</div>
+                    <div class="grid grid-cols-1 gap-2">
+                        <label class="text-xs text-slate-400">标签</label>
+                        <div class="flex gap-2">
+                            <select id="tagFilter"
+                                class="flex-1 px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-sm"></select>
+                            <button id="btnLoadTags"
+                                class="px-2 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-xs">刷新标签</button>
+                        </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <label class="text-sm space-y-1">
-                        <span class="text-slate-300">创建页面名</span>
-                        <input id="createPageName" class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
-                            placeholder="例如：WebUI 验证页" />
-                    </label>
+                        <label class="text-xs text-slate-400">页面名包含（可选）</label>
+                        <input id="pageNameFilter"
+                            class="w-full px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-sm"
+                            placeholder="例如：项目" />
 
-                    <label class="text-sm space-y-1">
-                        <span class="text-slate-300">当前页面</span>
-                        <input id="currentPageName"
-                            class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
-                            placeholder="点击左侧页面可自动填充" />
-                    </label>
-                </div>
+                        <label class="text-xs text-slate-400">元数据键（property）</label>
+                        <input id="metaKeyFilter"
+                            class="w-full px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-sm"
+                            placeholder="例如：status" />
 
-                <div class="flex flex-wrap gap-2">
-                    <button id="btnCreatePage"
-                        class="px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600 text-sm">创建页面</button>
-                    <button id="btnLoadPage"
-                        class="px-3 py-1.5 rounded bg-blue-700 hover:bg-blue-600 text-sm">加载页面详情</button>
-                    <button id="btnDeletePage"
-                        class="px-3 py-1.5 rounded bg-rose-700 hover:bg-rose-600 text-sm">删除当前页面</button>
-                </div>
+                        <label class="text-xs text-slate-400">元数据值（可选，空则仅检查键存在）</label>
+                        <input id="metaValueFilter"
+                            class="w-full px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-sm"
+                            placeholder="例如：doing" />
 
-                <h3 class="font-semibold pt-2 border-t border-slate-800">块操作</h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <label class="text-sm space-y-1 md:col-span-2">
-                        <span class="text-slate-300">追加块内容（append）</span>
-                        <textarea id="appendContent" rows="3"
-                            class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
-                            placeholder="例如：- [ ] 来自 webui 的测试条目"></textarea>
-                    </label>
+                        <div class="flex items-center gap-2">
+                            <select id="metaModeFilter"
+                                class="px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-sm">
+                                <option value="contains">包含 contains</option>
+                                <option value="equals">严格等于 equals</option>
+                            </select>
+                            <label class="text-xs text-slate-300 inline-flex items-center gap-1">
+                                <input id="includeJournalFilter" type="checkbox" checked />
+                                包含 Journal
+                            </label>
+                        </div>
 
-                    <button id="btnAppendBlock"
-                        class="px-3 py-1.5 rounded bg-cyan-700 hover:bg-cyan-600 text-sm w-fit">追加到当前页面</button>
-
-                    <div></div>
-
-                    <label class="text-sm space-y-1">
-                        <span class="text-slate-300">更新块 UUID</span>
-                        <input id="updateUUID" class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
-                            placeholder="粘贴块 uuid" />
-                    </label>
-
-                    <label class="text-sm space-y-1">
-                        <span class="text-slate-300">更新后内容</span>
-                        <input id="updateContent" class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
-                            placeholder="新的块内容" />
-                    </label>
-
-                    <div class="flex gap-2 md:col-span-2">
-                        <button id="btnUpdateBlock"
-                            class="px-3 py-1.5 rounded bg-amber-700 hover:bg-amber-600 text-sm">更新块</button>
-                        <button id="btnRemoveBlock"
-                            class="px-3 py-1.5 rounded bg-rose-700 hover:bg-rose-600 text-sm">删除块</button>
+                        <div class="flex gap-2 pt-1">
+                            <button id="btnApplyPageFilter"
+                                class="px-2 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-xs">应用过滤</button>
+                            <button id="btnClearPageFilter"
+                                class="px-2 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-xs">清空过滤</button>
+                        </div>
+                        <div id="pageFilterSummary" class="text-xs text-slate-400"></div>
                     </div>
                 </div>
 
-                <h3 class="font-semibold pt-2 border-t border-slate-800">搜索</h3>
-                <div class="flex gap-2">
-                    <input id="searchQuery" class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700"
-                        placeholder="输入关键词" />
-                    <button id="btnSearch"
-                        class="px-3 py-2 rounded bg-violet-700 hover:bg-violet-600 text-sm">搜索</button>
-                </div>
+                <div id="pages" class="space-y-1 max-h-[360px] overflow-auto pr-1 mt-3"></div>
+            </details>
 
-                <h3 class="font-semibold pt-2 border-t border-slate-800">查询（Datalog / DSL）</h3>
-                <div class="space-y-2">
-                    <textarea id="queryText" rows="4"
-                        class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
-                        placeholder="例如：[:find ?p :where [?b :block/name ?p]]"></textarea>
-                    <div class="flex gap-2">
-                        <button id="btnQueryDatalog" class="px-3 py-2 rounded bg-teal-700 hover:bg-teal-600 text-sm">执行
-                            Datalog</button>
-                        <button id="btnQueryDSL" class="px-3 py-2 rounded bg-sky-700 hover:bg-sky-600 text-sm">执行
-                            DSL</button>
+            <section class="lg:col-span-2 space-y-4">
+                <details data-collapsible="true" open class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                    <summary class="font-semibold cursor-pointer select-none">页面管理</summary>
+                    <div class="mt-3 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <div class="text-xs text-slate-400">创建、加载、删除当前页面</div>
+                            <button id="btnPages"
+                                class="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-sm">刷新页面列表</button>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <label class="text-sm space-y-1">
+                                <span class="text-slate-300">创建页面名</span>
+                                <input id="createPageName"
+                                    class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                                    placeholder="例如：WebUI 验证页" />
+                            </label>
+
+                            <label class="text-sm space-y-1">
+                                <span class="text-slate-300">当前页面</span>
+                                <input id="currentPageName"
+                                    class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                                    placeholder="点击左侧页面可自动填充" />
+                            </label>
+                        </div>
+
+                        <div class="flex flex-wrap gap-2">
+                            <button id="btnCreatePage"
+                                class="px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600 text-sm">创建页面</button>
+                            <button id="btnLoadPage"
+                                class="px-3 py-1.5 rounded bg-blue-700 hover:bg-blue-600 text-sm">加载页面详情</button>
+                            <button id="btnDeletePage"
+                                class="px-3 py-1.5 rounded bg-rose-700 hover:bg-rose-600 text-sm">删除当前页面</button>
+                        </div>
                     </div>
-                </div>
+                </details>
+
+                <details data-collapsible="true" open class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                    <summary class="font-semibold cursor-pointer select-none">块管理</summary>
+                    <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <label class="text-sm space-y-1 md:col-span-2">
+                            <span class="text-slate-300">追加块内容（append）</span>
+                            <textarea id="appendContent" rows="3"
+                                class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                                placeholder="例如：- [ ] 来自 webui 的测试条目"></textarea>
+                        </label>
+
+                        <button id="btnAppendBlock"
+                            class="px-3 py-1.5 rounded bg-cyan-700 hover:bg-cyan-600 text-sm w-fit">追加到当前页面</button>
+
+                        <div></div>
+
+                        <label class="text-sm space-y-1">
+                            <span class="text-slate-300">更新块 UUID</span>
+                            <input id="updateUUID" class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                                placeholder="粘贴块 uuid" />
+                        </label>
+
+                        <label class="text-sm space-y-1">
+                            <span class="text-slate-300">更新后内容</span>
+                            <input id="updateContent"
+                                class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                                placeholder="新的块内容" />
+                        </label>
+
+                        <div class="flex gap-2 md:col-span-2">
+                            <button id="btnUpdateBlock"
+                                class="px-3 py-1.5 rounded bg-amber-700 hover:bg-amber-600 text-sm">更新块</button>
+                            <button id="btnRemoveBlock"
+                                class="px-3 py-1.5 rounded bg-rose-700 hover:bg-rose-600 text-sm">删除块</button>
+                        </div>
+                    </div>
+                </details>
+
+                <details data-collapsible="true" open class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                    <summary class="font-semibold cursor-pointer select-none">检索与查询</summary>
+                    <div class="mt-3 space-y-3">
+                        <div class="space-y-2">
+                            <label class="text-sm text-slate-300">全文搜索</label>
+                            <div class="flex gap-2">
+                                <input id="searchQuery"
+                                    class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                                    placeholder="输入关键词" />
+                                <button id="btnSearch"
+                                    class="px-3 py-2 rounded bg-violet-700 hover:bg-violet-600 text-sm">搜索</button>
+                            </div>
+                        </div>
+
+                        <div class="pt-2 border-t border-slate-800 space-y-2">
+                            <label class="text-sm text-slate-300">Datalog / DSL 查询</label>
+                            <textarea id="queryText" rows="4"
+                                class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                                placeholder="例如：[:find ?p :where [?b :block/name ?p]]"></textarea>
+
+                            <div class="rounded border border-slate-800 bg-slate-950/60 p-3 space-y-2">
+                                <div class="text-xs text-slate-300">Datalog 示例（语法较难时可直接套用）</div>
+                                <div class="flex flex-wrap gap-2">
+                                    <select id="datalogExample"
+                                        class="flex-1 min-w-[240px] px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm"></select>
+                                    <button id="btnUseDatalogExample"
+                                        class="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600 text-sm">填充示例</button>
+                                    <button id="btnRunDatalogExample"
+                                        class="px-3 py-2 rounded bg-emerald-700 hover:bg-emerald-600 text-sm">填充并执行</button>
+                                </div>
+                                <div id="datalogExampleDesc" class="text-xs text-slate-400"></div>
+                            </div>
+
+                            <div class="flex gap-2">
+                                <button id="btnQueryDatalog"
+                                    class="px-3 py-2 rounded bg-teal-700 hover:bg-teal-600 text-sm">执行 Datalog</button>
+                                <button id="btnQueryDSL"
+                                    class="px-3 py-2 rounded bg-sky-700 hover:bg-sky-600 text-sm">执行 DSL</button>
+                            </div>
+                        </div>
+                    </div>
+                </details>
             </section>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <section class="lg:col-span-2 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-                <h2 class="font-semibold">结果输出</h2>
+            <details data-collapsible="true" open
+                class="lg:col-span-2 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                <summary class="font-semibold cursor-pointer select-none">结果输出</summary>
                 <pre id="output"
                     class="mt-3 text-xs bg-slate-950 border border-slate-800 rounded p-3 overflow-auto max-h-[500px]">(暂无)</pre>
-            </section>
+            </details>
 
-            <section class="lg:col-span-1 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-                <div class="flex items-center justify-between">
-                    <h2 class="font-semibold">最近操作（可回放）</h2>
+            <details data-collapsible="true" open
+                class="lg:col-span-1 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                <summary class="font-semibold cursor-pointer select-none">最近操作（可回放）</summary>
+                <div class="mt-3 flex items-center justify-end">
                     <button id="btnClearHistory"
                         class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600">清空</button>
                 </div>
                 <div id="history" class="mt-3 space-y-2 max-h-[500px] overflow-auto"></div>
-            </section>
+            </details>
         </div>
     </div>
 
     <script>
+        // ===== 基础工具 =====
         const $ = (id) => document.getElementById(id);
 
         const output = $("output");
         const pagesBox = $("pages");
         const historyBox = $("history");
         const connectionInfoBox = $("connectionInfo");
+        const tagFilterSelect = $("tagFilter");
+        const pageNameFilterInput = $("pageNameFilter");
+        const metaKeyFilterInput = $("metaKeyFilter");
+        const metaValueFilterInput = $("metaValueFilter");
+        const metaModeFilterSelect = $("metaModeFilter");
+        const includeJournalFilterInput = $("includeJournalFilter");
+        const pageFilterSummary = $("pageFilterSummary");
+        const datalogExampleSelect = $("datalogExample");
+        const datalogExampleDesc = $("datalogExampleDesc");
         const actionHistory = [];
         const maxHistory = 20;
+
+        const datalogExamples = [
+            {
+                key: "page-name-all",
+                title: "列出所有页面名",
+                desc: "适合验证查询链路是否正常。",
+                query: "[:find ?name :where [?p :block/name ?name]]",
+            },
+            {
+                key: "todo-blocks",
+                title: "查询 TODO 块",
+                desc: "查找标记为 TODO 的任务块。",
+                query: "[:find ?content :where [?b :block/marker \"TODO\"] [?b :block/content ?content]]",
+            },
+            {
+                key: "priority-a",
+                title: "查询 A 优先级任务",
+                desc: "筛选高优先级任务（A）。",
+                query: "[:find ?content :where [?b :block/priority \"A\"] [?b :block/content ?content]]",
+            },
+            {
+                key: "blocks-with-tag",
+                title: "查询带标签的块",
+                desc: "查看带 :block/tags 关联的块内容。",
+                query: "[:find ?content :where [?b :block/tags ?t] [?b :block/content ?content]]",
+            },
+            {
+                key: "recent-updated",
+                title: "最近更新的块（前20）",
+                desc: "按更新时间倒序看最近活跃内容。",
+                query: "[:find ?content ?updated :where [?b :block/content ?content] [?b :block/updated-at ?updated] :order-by [(desc ?updated)] :limit 20]",
+            },
+        ];
+
+        function getCollapsiblePanels() {
+            return Array.from(document.querySelectorAll('details[data-collapsible="true"]'));
+        }
+
+        function setAllPanels(expanded) {
+            getCollapsiblePanels().forEach((panel) => {
+                panel.open = expanded;
+            });
+        }
+
+        function readPageFilterState() {
+            return {
+                tag: String(tagFilterSelect?.value || "").trim(),
+                name: String(pageNameFilterInput?.value || "").trim(),
+                property: String(metaKeyFilterInput?.value || "").trim(),
+                value: String(metaValueFilterInput?.value || "").trim(),
+                mode: String(metaModeFilterSelect?.value || "contains"),
+                includeJournal: !!includeJournalFilterInput?.checked,
+            };
+        }
+
+        function hasActivePageFilter(filter) {
+            return !!(filter.tag || filter.name || filter.property || !filter.includeJournal);
+        }
+
+        function buildPageFilterURL(filter) {
+            const params = new URLSearchParams();
+            if (filter.tag) params.set("tag", filter.tag);
+            if (filter.name) params.set("name", filter.name);
+            if (filter.property) params.set("property", filter.property);
+            if (filter.value) params.set("value", filter.value);
+            if (filter.mode) params.set("mode", filter.mode);
+            params.set("includeJournal", String(filter.includeJournal));
+            return "/api/pages/filter?" + params.toString();
+        }
+
+        function renderPageFilterSummary(useFilter, stats, filter) {
+            if (!pageFilterSummary) return;
+
+            if (!useFilter) {
+                pageFilterSummary.textContent = `当前显示全部页面：${stats.filteredTotal}`;
+                return;
+            }
+
+            const chips = [];
+            if (filter.tag) chips.push(`tag=${filter.tag}`);
+            if (filter.name) chips.push(`name~${filter.name}`);
+            if (filter.property) {
+                const op = filter.mode === "equals" ? "=" : "~";
+                chips.push(filter.value ? `${filter.property}${op}${filter.value}` : `${filter.property}(exists)`);
+            }
+            if (!filter.includeJournal) chips.push("exclude journal");
+
+            pageFilterSummary.textContent = `已过滤：${stats.filteredTotal}/${stats.total}` + (chips.length ? `（${chips.join("; ")}）` : "");
+        }
+
+        function clearPageFilterInputs() {
+            if (tagFilterSelect) tagFilterSelect.value = "";
+            if (pageNameFilterInput) pageNameFilterInput.value = "";
+            if (metaKeyFilterInput) metaKeyFilterInput.value = "";
+            if (metaValueFilterInput) metaValueFilterInput.value = "";
+            if (metaModeFilterSelect) metaModeFilterSelect.value = "contains";
+            if (includeJournalFilterInput) includeJournalFilterInput.checked = true;
+        }
+
+        async function loadTags(needRecord = true) {
+            const request = { method: "GET", url: "/api/tags" };
+            try {
+                const tags = await api(request.url);
+                const current = String(tagFilterSelect?.value || "");
+                if (tagFilterSelect) {
+                    tagFilterSelect.innerHTML = "";
+                    const all = document.createElement("option");
+                    all.value = "";
+                    all.textContent = "全部标签";
+                    tagFilterSelect.appendChild(all);
+
+                    (tags || []).forEach((tag) => {
+                        const opt = document.createElement("option");
+                        opt.value = String(tag);
+                        opt.textContent = String(tag);
+                        tagFilterSelect.appendChild(opt);
+                    });
+
+                    tagFilterSelect.value = current;
+                }
+                if (needRecord) {
+                    addHistory("刷新标签列表", request, true, { count: (tags || []).length });
+                }
+            } catch (e) {
+                if (needRecord) {
+                    addHistory("刷新标签列表", request, false, e.message);
+                }
+                print(`刷新标签列表失败: ${e.message}`);
+            }
+        }
+
+        function getCurrentDatalogExample() {
+            const key = String(datalogExampleSelect?.value || "");
+            return datalogExamples.find((item) => item.key === key) || datalogExamples[0] || null;
+        }
+
+        function renderDatalogExamples() {
+            if (!datalogExampleSelect) return;
+
+            datalogExampleSelect.innerHTML = "";
+            datalogExamples.forEach((item) => {
+                const opt = document.createElement("option");
+                opt.value = item.key;
+                opt.textContent = item.title;
+                datalogExampleSelect.appendChild(opt);
+            });
+
+            const current = getCurrentDatalogExample();
+            if (current) {
+                datalogExampleSelect.value = current.key;
+                datalogExampleDesc.textContent = current.desc;
+            }
+        }
+
+        function applyDatalogExample(printToOutput = false) {
+            const current = getCurrentDatalogExample();
+            if (!current) return;
+
+            $("queryText").value = current.query;
+            datalogExampleDesc.textContent = current.desc;
+
+            if (printToOutput) {
+                print({
+                    message: `已填充 Datalog 示例：${current.title}`,
+                    query: current.query,
+                    hint: current.desc,
+                });
+            }
+        }
 
         function print(data) {
             if (typeof data === "string") {
@@ -172,6 +450,8 @@
         function nowText() {
             return new Date().toLocaleTimeString("zh-CN", { hour12: false });
         }
+
+        // ===== 历史回放 =====
 
         function preview(data) {
             if (typeof data === "string") {
@@ -288,10 +568,23 @@
             return body.data;
         }
 
+        // ===== 页面管理 =====
+
         async function refreshPages(needRecord = true) {
-            const request = { method: "GET", url: "/api/pages" };
+            const filter = readPageFilterState();
+            const useFilter = hasActivePageFilter(filter);
+            const request = {
+                method: "GET",
+                url: useFilter ? buildPageFilterURL(filter) : "/api/pages",
+            };
             try {
-                const pages = await api("/api/pages");
+                const data = await api(request.url);
+                const pages = useFilter ? (data?.items || []) : (data || []);
+                const stats = {
+                    total: useFilter ? Number(data?.total || pages.length) : pages.length,
+                    filteredTotal: useFilter ? Number(data?.filteredTotal || pages.length) : pages.length,
+                };
+
                 pagesBox.innerHTML = "";
                 pages
                     .sort((a, b) => (a.originalName || a.name || "").localeCompare(b.originalName || b.name || ""))
@@ -307,11 +600,28 @@
                         pagesBox.appendChild(btn);
                     });
 
-                print({ message: `pages loaded: ${pages.length}` });
-                if (needRecord) addHistory("刷新页面列表", request, true, { count: pages.length });
+                renderPageFilterSummary(useFilter, stats, filter);
+
+                if (useFilter) {
+                    print({
+                        message: `pages filtered: ${stats.filteredTotal}/${stats.total}`,
+                        filter,
+                        count: pages.length,
+                    });
+                } else {
+                    print({ message: `pages loaded: ${pages.length}` });
+                }
+
+                if (needRecord) {
+                    const action = useFilter ? "按元数据过滤页面" : "刷新页面列表";
+                    addHistory(action, request, true, { count: pages.length, ...stats, filter });
+                }
             } catch (e) {
                 print(`刷新页面失败: ${e.message}`);
-                if (needRecord) addHistory("刷新页面列表", request, false, e.message);
+                if (needRecord) {
+                    const action = useFilter ? "按元数据过滤页面" : "刷新页面列表";
+                    addHistory(action, request, false, e.message);
+                }
             }
         }
 
@@ -412,6 +722,8 @@
             }
         }
 
+        // ===== 块管理 =====
+
         async function updateBlock() {
             const uuid = $("updateUUID").value.trim();
             const content = $("updateContent").value.trim();
@@ -483,6 +795,8 @@
             }
         }
 
+        // ===== 检索与查询 =====
+
         async function runDatalogQuery() {
             const query = $("queryText").value.trim();
             if (!query) {
@@ -553,6 +867,7 @@
             }
         }
 
+        // ===== 系统与连接 =====
         async function loadConnectionInfo(needRecord = true, needPrint = false) {
             const request = { method: "GET", url: "/api/connection" };
             try {
@@ -575,9 +890,17 @@
             }
         }
 
+        // ===== 事件绑定与初始化 =====
+
         $("btnHealth").onclick = runHealth;
         $("btnGraph").onclick = runGraph;
         $("btnPages").onclick = refreshPages;
+        $("btnLoadTags").onclick = () => loadTags(true);
+        $("btnApplyPageFilter").onclick = () => refreshPages(true);
+        $("btnClearPageFilter").onclick = async () => {
+            clearPageFilterInputs();
+            await refreshPages(true);
+        };
         $("btnConnection").onclick = () => loadConnectionInfo(true, true);
         $("btnCreatePage").onclick = createPage;
         $("btnLoadPage").onclick = loadPage;
@@ -588,14 +911,29 @@
         $("btnSearch").onclick = search;
         $("btnQueryDatalog").onclick = runDatalogQuery;
         $("btnQueryDSL").onclick = runDSLQuery;
+        $("btnUseDatalogExample").onclick = () => applyDatalogExample(true);
+        $("btnRunDatalogExample").onclick = async () => {
+            applyDatalogExample(false);
+            await runDatalogQuery();
+        };
+        datalogExampleSelect.onchange = () => {
+            const current = getCurrentDatalogExample();
+            if (current) {
+                datalogExampleDesc.textContent = current.desc;
+            }
+        };
+        $("btnExpandAll").onclick = () => setAllPanels(true);
+        $("btnCollapseAll").onclick = () => setAllPanels(false);
         $("btnClearHistory").onclick = () => {
             actionHistory.length = 0;
             renderHistory();
             print("历史已清空");
         };
 
+        renderDatalogExamples();
         renderHistory();
         loadConnectionInfo(false, false);
+        loadTags(false);
         refreshPages(false);
     </script>
 </body>
