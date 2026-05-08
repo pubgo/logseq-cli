@@ -11,7 +11,8 @@
 
 <body class="bg-slate-950 text-slate-100 min-h-screen">
 
-  <div class="max-w-7xl mx-auto p-4 md:p-6 space-y-4" x-data="logseqApp()" x-init="init()">
+  <div class="max-w-7xl mx-auto p-4 md:p-6 space-y-4" x-data="logseqApp()" x-init="init()"
+    @click="if($event.target.dataset.pageLink){outputPageClick($event.target.dataset.pageLink)}">
 
     <!-- Toast -->
     <div x-show="toast.show" x-transition.opacity.duration.300ms
@@ -209,37 +210,78 @@
             </div>
           </div>
 
-          <!-- Page blocks tree -->
-          <div x-show="pageBlocks.length" class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <!-- Page outline view -->
+          <div x-show="pageBlocks.length||pageDetail"
+            class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+            <!-- Page title & metadata -->
             <div class="flex items-center justify-between">
-              <span class="font-semibold text-sm">页面块树 <span class="text-slate-400 font-normal"
-                  x-text="'('+pageBlocks.length+' 块)'"></span></span>
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-lg text-slate-50" x-text="pageDetail?.name||currentPage||''"></span>
+                <span class="text-xs text-slate-500" x-text="pageBlocks.length?pageBlocks.length+' 块':''"></span>
+              </div>
               <button class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600"
-                @click="pageBlocks=[]">收起</button>
+                @click="pageBlocks=[];pageDetail=null">收起</button>
             </div>
-            <div class="space-y-1 max-h-[400px] overflow-auto">
+
+            <!-- Page properties -->
+            <template x-if="pageDetail?.properties?.length">
+              <div class="border-b border-slate-800 pb-3 space-y-0.5">
+                <template x-for="([pk,pv]) in pageDetail.properties" :key="pk">
+                  <div class="text-xs">
+                    <span class="text-teal-400/80 font-mono" x-text="pk"></span><span class="text-slate-600">::</span>
+                    <span class="text-slate-300 ml-1" x-text="Array.isArray(pv)?pv.join(', '):String(pv)"></span>
+                  </div>
+                </template>
+              </div>
+            </template>
+
+            <!-- Outline blocks -->
+            <div class="max-h-[500px] overflow-auto outline-tree">
               <template x-for="(b,i) in pageBlocks" :key="b.uuid||i">
-                <div class="rounded border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm"
-                  :style="'margin-left:'+(b.level||0)*16+'px'">
-                  <div class="flex items-start gap-2">
-                    <div class="flex-1 min-w-0">
-                      <div class="text-slate-200 whitespace-pre-wrap break-words" x-text="b.content||'(空块)'"></div>
-                      <div class="flex items-center gap-2 mt-1">
-                        <code
-                          class="text-[10px] text-slate-500 bg-slate-900 px-1 rounded cursor-pointer hover:text-indigo-300 select-all"
-                          :title="'点击复制 UUID'" @click="copyUUID(b.uuid)" x-text="b.uuid?.slice(0,8)+'...'"></code>
-                        <template x-if="b.marker"><span class="text-[10px] px-1 rounded"
-                            :class="b.marker==='DONE'?'bg-emerald-900 text-emerald-300':'bg-amber-900 text-amber-300'"
-                            x-text="b.marker"></span></template>
-                        <template x-if="b.priority"><span class="text-[10px] px-1 rounded bg-rose-900 text-rose-300"
-                            x-text="'P'+b.priority"></span></template>
-                      </div>
-                    </div>
-                    <div class="flex gap-1 shrink-0">
-                      <button class="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 hover:bg-slate-600"
-                        @click="fillBlockUUID(b.uuid)" title="填入块操作">→块</button>
-                      <button class="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 hover:bg-slate-600"
-                        @click="block.insertTarget=b.uuid;activeTab='blocks'" title="在此块下插入">+子</button>
+                <div class="group flex items-start gap-0" :style="'padding-left:'+(b.level||0)*20+'px'">
+                  <!-- Bullet -->
+                  <div class="shrink-0 mt-[7px] mr-1.5 flex items-center">
+                    <template x-if="b.marker==='TODO'">
+                      <span class="w-3.5 h-3.5 rounded border border-amber-500/60 inline-block"></span>
+                    </template>
+                    <template x-if="b.marker==='DOING'">
+                      <span class="w-3.5 h-3.5 rounded border-2 border-blue-400/70 inline-block"></span>
+                    </template>
+                    <template x-if="b.marker==='DONE'">
+                      <span
+                        class="w-3.5 h-3.5 rounded bg-emerald-600/50 border border-emerald-500/60 inline-flex items-center justify-center text-[9px] text-emerald-200">✓</span>
+                    </template>
+                    <template
+                      x-if="b.marker==='LATER'||b.marker==='WAIT'||b.marker==='WAITING'||b.marker==='CANCELLED'">
+                      <span
+                        class="w-3.5 h-3.5 rounded border border-slate-500/60 inline-flex items-center justify-center text-[8px] text-slate-400"
+                        x-text="b.marker[0]"></span>
+                    </template>
+                    <template x-if="!b.marker||b.marker===''||b.marker==='NOW'">
+                      <span class="w-1.5 h-1.5 rounded-full bg-slate-500/70 inline-block"></span>
+                    </template>
+                  </div>
+                  <!-- Content -->
+                  <div class="flex-1 min-w-0 py-[3px]">
+                    <div class="text-sm leading-relaxed text-slate-200 break-words"
+                      :class="{'line-through text-slate-500': b.marker==='DONE'||b.marker==='CANCELLED'}"
+                      x-html="renderMd(b.content)||'<span class=\'text-slate-600 italic\'>(空块)</span>'"></div>
+                    <!-- Priority badge -->
+                    <template x-if="b.priority">
+                      <span class="inline-block text-[10px] px-1 py-0 rounded mt-0.5"
+                        :class="b.priority==='A'?'bg-rose-900/70 text-rose-300':b.priority==='B'?'bg-amber-900/70 text-amber-300':'bg-slate-700 text-slate-300'"
+                        x-text="'Priority '+b.priority"></span>
+                    </template>
+                    <!-- Hover actions -->
+                    <div class="hidden group-hover:flex items-center gap-1.5 mt-0.5">
+                      <code class="text-[10px] text-slate-500 cursor-pointer hover:text-indigo-300"
+                        @click="copyUUID(b.uuid)" :title="b.uuid" x-text="b.uuid?.slice(0,8)+'…'"></code>
+                      <button
+                        class="text-[10px] px-1 py-0 rounded bg-slate-700/80 hover:bg-slate-600 text-slate-400 hover:text-slate-200"
+                        @click="fillBlockUUID(b.uuid)">→块</button>
+                      <button
+                        class="text-[10px] px-1 py-0 rounded bg-slate-700/80 hover:bg-slate-600 text-slate-400 hover:text-slate-200"
+                        @click="block.insertTarget=b.uuid;activeTab='blocks'">+子</button>
                     </div>
                   </div>
                 </div>
@@ -598,17 +640,182 @@
     <!-- ==================== Output ==================== -->
     <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
       <div class="flex items-center justify-between mb-2">
-        <span class="font-semibold text-sm">输出</span>
+        <div class="flex items-center gap-2">
+          <span class="font-semibold text-sm">输出</span>
+          <span x-show="outputType!=='text'" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300"
+            x-text="outputTypeLabel()"></span>
+        </div>
         <div class="flex gap-2">
-          <button class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600" @click="output='(暂无)'">清空</button>
+          <button x-show="outputType!=='text'" class="text-xs px-2 py-1 rounded transition-colors"
+            :class="outputRaw?'bg-slate-700 hover:bg-slate-600':'bg-indigo-700 hover:bg-indigo-600'"
+            @click="outputRaw=!outputRaw" x-text="outputRaw?'结构化视图':'原始 JSON'"></button>
+          <button class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600" @click="clearOutput()">清空</button>
           <button class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600" @click="copyOutput()">复制</button>
           <button class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600"
             @click="downloadOutput()">下载</button>
         </div>
       </div>
-      <pre
+
+      <!-- Raw JSON / plain text -->
+      <pre x-show="outputRaw || outputType==='text'"
         class="text-xs bg-slate-950 border border-slate-800 rounded p-3 overflow-auto max-h-[500px] whitespace-pre-wrap break-words"
         x-text="output"></pre>
+
+      <!-- ── Structured: Properties (key-value) ── -->
+      <div x-show="!outputRaw && outputType==='properties'" class="overflow-auto max-h-[500px]">
+        <table class="w-full text-sm">
+          <template x-for="e in outputEntries()" :key="e.key">
+            <tr class="border-b border-slate-800/60">
+              <td class="py-1.5 pr-4 text-slate-400 font-mono text-xs whitespace-nowrap align-top" x-text="e.key"></td>
+              <td class="py-1.5 text-slate-200 text-xs break-all">
+                <template x-if="e.isUUID"><code class="cursor-pointer hover:text-indigo-300" @click="copyUUID(e.value)"
+                    x-text="e.value"></code></template>
+                <template x-if="!e.isUUID"><span x-text="e.value"></span></template>
+              </td>
+            </tr>
+          </template>
+        </table>
+      </div>
+
+      <!-- ── Structured: Query result table ── -->
+      <div x-show="!outputRaw && outputType==='query'" class="overflow-auto max-h-[500px]">
+        <div class="text-xs text-slate-400 mb-2" x-text="(outputObj||[]).length+' 行结果'"></div>
+        <table class="w-full text-sm border-collapse">
+          <tbody>
+            <template x-for="(row,ri) in (outputObj||[])" :key="ri">
+              <tr class="border-b border-slate-800/60 hover:bg-slate-800/30">
+                <td class="py-1 pr-2 text-slate-500 text-[10px] w-6 text-right align-top" x-text="ri+1"></td>
+                <template x-for="(cell,ci) in (Array.isArray(row)?row:[row])" :key="ci">
+                  <td class="py-1 px-2 text-slate-200 font-mono text-xs break-all"
+                    x-text="typeof cell==='object'?JSON.stringify(cell):String(cell)"></td>
+                </template>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ── Structured: String list ── -->
+      <div x-show="!outputRaw && outputType==='string-list'" class="overflow-auto max-h-[500px]">
+        <div class="text-xs text-slate-400 mb-2" x-text="(outputObj||[]).length+' 项'"></div>
+        <div class="flex flex-wrap gap-1.5">
+          <template x-for="(s,i) in (outputObj||[])" :key="i">
+            <span
+              class="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-xs text-slate-200 cursor-pointer hover:bg-slate-700 hover:text-white transition-colors"
+              @click="outputPageClick(s)" x-text="s"></span>
+          </template>
+        </div>
+      </div>
+
+      <!-- ── Structured: Page list ── -->
+      <div x-show="!outputRaw && outputType==='page-list'" class="overflow-auto max-h-[500px] space-y-1">
+        <div class="text-xs text-slate-400 mb-2" x-text="(outputObj||[]).length+' 个页面'"></div>
+        <template x-for="(p,i) in (outputObj||[])" :key="i">
+          <div
+            class="flex items-center justify-between rounded border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm hover:bg-slate-800/40">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-blue-900 text-blue-300">页面</span>
+              <span class="truncate" x-text="p.originalName||p.name||'(unnamed)'"></span>
+            </div>
+            <div class="flex items-center gap-2 shrink-0 ml-2">
+              <button class="px-2 py-0.5 rounded bg-blue-700 hover:bg-blue-600 text-xs"
+                @click="outputPageClick(p.originalName||p.name)">查看</button>
+              <template x-if="p.uuid"><code class="text-[10px] text-slate-500 cursor-pointer hover:text-indigo-300"
+                  @click="copyUUID(p.uuid)" x-text="(p.uuid||'').slice(0,8)+'…'"></code></template>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- ── Structured: Block list ── -->
+      <div x-show="!outputRaw && outputType==='block-list'" class="overflow-auto max-h-[500px] space-y-1">
+        <div class="text-xs text-slate-400 mb-2" x-text="(outputObj||[]).length+' 个块'"></div>
+        <template x-for="(b,i) in (outputObj||[])" :key="i">
+          <div class="rounded border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm">
+            <div class="text-slate-200 text-xs whitespace-pre-wrap break-words"
+              x-text="(b.content||b['block/content']||'(空)').slice(0,200)"></div>
+            <div class="flex items-center gap-2 mt-1">
+              <code class="text-[10px] text-slate-500 cursor-pointer hover:text-indigo-300"
+                @click="copyUUID(b.uuid||b['block/uuid'])" x-text="(b.uuid||b['block/uuid']||'').slice(0,8)+'…'"></code>
+              <template x-if="b.marker||b['block/marker']"><span
+                  class="text-[10px] px-1 rounded bg-amber-900 text-amber-300"
+                  x-text="b.marker||b['block/marker']"></span></template>
+              <button class="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 hover:bg-slate-600"
+                @click="fillBlockUUID(b.uuid||b['block/uuid'])">→块操作</button>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- ── Structured: Page detail ── -->
+      <div x-show="!outputRaw && outputType==='page-detail'" class="overflow-auto max-h-[500px]">
+        <div class="rounded border border-slate-800 bg-slate-950/60 p-3 space-y-3">
+          <div class="flex items-center gap-2">
+            <span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-blue-900 text-blue-300">页面</span>
+            <span class="font-medium text-base"
+              x-text="outputObj?.originalName||outputObj?.name||outputObj?.['block/name']||outputObj?.['original-name']||''"></span>
+          </div>
+          <table class="w-full text-xs">
+            <template x-for="e in outputDetailEntries()" :key="e.key">
+              <tr class="border-b border-slate-800/40">
+                <td class="py-1 pr-3 text-slate-400 font-mono whitespace-nowrap align-top" x-text="e.key"></td>
+                <td class="py-1 text-slate-200 break-all">
+                  <template x-if="e.isUUID"><code class="cursor-pointer hover:text-indigo-300"
+                      @click="copyUUID(e.value)" x-text="e.value"></code></template>
+                  <template x-if="!e.isUUID"><span x-text="e.value"></span></template>
+                </td>
+              </tr>
+            </template>
+          </table>
+          <div class="flex gap-2">
+            <button class="text-xs px-2 py-0.5 rounded bg-blue-700 hover:bg-blue-600"
+              @click="outputPageClick(outputObj?.originalName||outputObj?.name||'')">查看页面</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Structured: Block detail ── -->
+      <div x-show="!outputRaw && outputType==='block-detail'" class="overflow-auto max-h-[500px]">
+        <div class="rounded border border-slate-800 bg-slate-950/60 p-3 space-y-3">
+          <div class="flex items-center gap-2">
+            <span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-purple-900 text-purple-300">块</span>
+            <code class="text-xs text-slate-400 cursor-pointer hover:text-indigo-300"
+              @click="copyUUID(outputObj?.uuid||outputObj?.['block/uuid'])"
+              x-text="outputObj?.uuid||outputObj?.['block/uuid']||''"></code>
+          </div>
+          <div class="bg-slate-900 rounded p-2 text-sm text-slate-200 whitespace-pre-wrap break-words"
+            x-text="outputObj?.content||outputObj?.['block/content']||'(空)'"></div>
+          <table class="w-full text-xs">
+            <template x-for="e in outputDetailEntries()" :key="e.key">
+              <tr class="border-b border-slate-800/40">
+                <td class="py-1 pr-3 text-slate-400 font-mono whitespace-nowrap align-top" x-text="e.key"></td>
+                <td class="py-1 text-slate-200 break-all">
+                  <template x-if="e.isUUID"><code class="cursor-pointer hover:text-indigo-300"
+                      @click="copyUUID(e.value)" x-text="e.value"></code></template>
+                  <template x-if="!e.isUUID"><span x-text="e.value"></span></template>
+                </td>
+              </tr>
+            </template>
+          </table>
+          <div class="flex gap-2">
+            <button class="text-xs px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600"
+              @click="fillBlockUUID(outputObj?.uuid||outputObj?.['block/uuid'])">→块操作</button>
+            <button class="text-xs px-2 py-0.5 rounded bg-amber-700 hover:bg-amber-600"
+              @click="block.updateUUID=outputObj?.uuid||outputObj?.['block/uuid'];block.updateContent=outputObj?.content||outputObj?.['block/content']||''">→编辑</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Structured: Generic array ── -->
+      <div x-show="!outputRaw && outputType==='array'" class="overflow-auto max-h-[500px] space-y-1">
+        <div class="text-xs text-slate-400 mb-2" x-text="(outputObj||[]).length+' 项'"></div>
+        <template x-for="(item,i) in (outputObj||[])" :key="i">
+          <div class="rounded border border-slate-800 bg-slate-950/60 px-3 py-2">
+            <pre class="whitespace-pre-wrap break-words text-xs text-slate-200"
+              x-text="typeof item==='object'?JSON.stringify(item,null,2):String(item)"></pre>
+          </div>
+        </template>
+      </div>
     </div>
 
   </div><!-- end x-data -->
@@ -624,12 +831,16 @@
         conn: null,
         connOk: false,
         output: '(暂无)',
+        outputObj: null,
+        outputType: 'text',
+        outputRaw: false,
         loading: false,
         loadingMsg: '',
         toast: { show: false, ok: true, msg: '' },
         history: [],
         pageList: [],
         pageBlocks: [],
+        pageDetail: null,
         blockPreview: null,
         searchResults: [],
         showCreateWithContent: false,
@@ -677,7 +888,70 @@
           });
         },
 
-        print(d) { this.output = typeof d === 'string' ? d : JSON.stringify(d, null, 2); },
+        print(d) {
+          this.output = typeof d === 'string' ? d : JSON.stringify(d, null, 2);
+          if (d == null || typeof d !== 'object') { this.outputObj = null; this.outputType = 'text'; }
+          else { this.outputObj = d; this.outputType = this.detectOutputType(d); }
+        },
+        detectOutputType(d) {
+          if (Array.isArray(d)) {
+            if (!d.length) return 'text';
+            if (Array.isArray(d[0])) return 'query';
+            if (typeof d[0] === 'string') return 'string-list';
+            const f = d[0];
+            if (f.name || f.originalName || f['block/name']) return 'page-list';
+            if ((f.uuid || f['block/uuid']) && (f.content !== undefined || f['block/content'] !== undefined)) return 'block-list';
+            return 'array';
+          }
+          if (typeof d === 'object' && d !== null) {
+            if ((d.uuid || d['block/uuid']) && (d.content !== undefined || d['block/content'] !== undefined)) return 'block-detail';
+            if (d.name || d.originalName || d['block/name'] || d['original-name']) return 'page-detail';
+            return 'properties';
+          }
+          return 'text';
+        },
+        outputTypeLabel() {
+          const m = { properties: '属性', query: '查询结果', 'string-list': '列表', 'page-list': '页面列表', 'block-list': '块列表', 'page-detail': '页面详情', 'block-detail': '块详情', array: '数组' };
+          return m[this.outputType] || '';
+        },
+        outputEntries() {
+          if (!this.outputObj || typeof this.outputObj !== 'object' || Array.isArray(this.outputObj)) return [];
+          return Object.entries(this.outputObj).map(([k, v]) => {
+            let display = Array.isArray(v) ? '[' + v.length + ' 项]' : (v != null && typeof v === 'object') ? JSON.stringify(v) : String(v ?? '');
+            if (display.length > 300) display = display.slice(0, 300) + '…';
+            return { key: k, value: display, isUUID: /uuid/i.test(k) && typeof v === 'string' && /^[0-9a-f-]{8,}$/i.test(v) };
+          });
+        },
+        outputDetailEntries() {
+          if (!this.outputObj || typeof this.outputObj !== 'object') return [];
+          const skip = new Set(['children', 'block/children', 'content', 'block/content', 'name', 'originalName', 'original-name', 'block/name']);
+          return Object.entries(this.outputObj).filter(([k, v]) => !skip.has(k) && v != null && v !== '').map(([k, v]) => {
+            let display = Array.isArray(v) ? '[' + v.length + ' 项]' : (v != null && typeof v === 'object') ? JSON.stringify(v) : String(v ?? '');
+            if (display.length > 300) display = display.slice(0, 300) + '…';
+            return { key: k, value: display, isUUID: /uuid/i.test(k) && typeof v === 'string' && /^[0-9a-f-]{8,}$/i.test(v) };
+          });
+        },
+        clearOutput() { this.output = '(暂无)'; this.outputObj = null; this.outputType = 'text'; },
+        outputPageClick(name) { if (!name) return; this.currentPage = name; this.activeTab = 'pages'; this.loadPage(); },
+        renderMd(text) {
+          if (!text) return '';
+          let s = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          // Block-level: heading (first line only)
+          s = s.replace(/^(#{1,6})\s+(.+)$/m, (_, h, t) => '<span class="font-bold text-slate-100" style="font-size:' + Math.max(0.75, 1.1 - h.length * 0.08) + 'rem">' + t + '</span>');
+          // Properties: key:: value
+          s = s.replace(/^([a-zA-Z_-]+)::\s*(.*)$/gm, '<span class="text-slate-500 text-xs"><span class="text-teal-400/80">$1</span><span class="text-slate-600">::</span> $2</span>');
+          // Inline
+          s = s.replace(/~~(.+?)~~/g, '<del class="text-slate-500">$1</del>');
+          s = s.replace(/\*\*(.+?)\*\*/g, '<strong class="text-slate-100">$1</strong>');
+          s = s.replace(/(?<![*\w])\*([^*]+?)\*(?![*\w])/g, '<em>$1</em>');
+          s = s.replace(/`([^`]+?)`/g, '<code class="px-1 py-0.5 rounded bg-slate-800 text-pink-300 text-[11px]">$1</code>');
+          // Logseq links
+          s = s.replace(/\[\[([^\]]+?)\]\]/g, '<span class="text-blue-400 hover:underline cursor-pointer" data-page-link="$1">$1</span>');
+          s = s.replace(/(^|\s)#([\w\u4e00-\u9fff/-]+)/g, '$1<span class="text-indigo-400/80 text-xs">#$2</span>');
+          // Markdown links [text](url)
+          s = s.replace(/\[([^\]]+?)\]\(([^)]+?)\)/g, '<a class="text-blue-400 hover:underline" href="$2" target="_blank" rel="noopener">$1</a>');
+          return s;
+        },
         now() { return new Date().toLocaleTimeString('zh-CN', { hour12: false }); },
         showToast(msg, ok = true) {
           this.toast = { show: true, ok, msg };
@@ -787,20 +1061,49 @@
 
         parsePageBlocks(data) {
           this.pageBlocks = [];
+          this.pageDetail = null;
+          if (!data) return;
+
+          // API returns { page: {...}, blocks: [...] }
+          const pageObj = data.page || null;
+          let blockData = data.blocks || null;
+
+          // Extract page-level metadata
+          if (pageObj && typeof pageObj === 'object') {
+            const props = pageObj.properties || pageObj['block/properties'] || null;
+            this.pageDetail = {
+              name: pageObj.originalName || pageObj.name || pageObj['block/name'] || pageObj['original-name'] || '',
+              uuid: pageObj.uuid || pageObj['block/uuid'] || '',
+              properties: props && typeof props === 'object' && !Array.isArray(props) ? Object.entries(props) : [],
+            };
+          } else if (data && !Array.isArray(data) && !blockData) {
+            // Fallback: data itself is a page object
+            const props = data.properties || data['block/properties'] || null;
+            this.pageDetail = {
+              name: data.originalName || data.name || data['block/name'] || data['original-name'] || '',
+              uuid: data.uuid || data['block/uuid'] || '',
+              properties: props && typeof props === 'object' && !Array.isArray(props) ? Object.entries(props) : [],
+            };
+          }
+
           const walk = (blocks, level) => {
             if (!Array.isArray(blocks)) return;
             for (const b of blocks) {
               this.pageBlocks.push({
                 uuid: b.uuid || b.id,
-                content: b.content || '',
-                marker: b.marker || '',
-                priority: b.priority || '',
+                content: b.content || b['block/content'] || '',
+                marker: b.marker || b['block/marker'] || '',
+                priority: b.priority || b['block/priority'] || '',
                 level,
               });
               if (b.children) walk(b.children, level + 1);
+              else if (b['block/children']) walk(b['block/children'], level + 1);
             }
           };
-          if (Array.isArray(data)) walk(data, 0);
+
+          // Determine block source
+          if (blockData) walk(blockData, 0);
+          else if (Array.isArray(data)) walk(data, 0);
           else if (data?.children) walk(data.children, 0);
           else if (data?.['block/children']) walk(data['block/children'], 0);
         },
