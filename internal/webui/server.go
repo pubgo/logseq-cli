@@ -134,6 +134,8 @@ func (s *Server) handlePagesFilter(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(q.Get("name"))
 	includeJournal := parseBoolOrDefault(strings.TrimSpace(q.Get("includeJournal")), true)
 
+	taggedPages, hasTagIndex := s.getPageNameSetByTag(r.Context(), tag)
+
 	pages, err := s.getAllPages(r.Context())
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
@@ -148,7 +150,7 @@ func (s *Server) handlePagesFilter(w http.ResponseWriter, r *http.Request) {
 		if !matchesNameFilter(p, name) {
 			continue
 		}
-		if !matchesTagFilter(p, tag) {
+		if !matchesTagFilterWithIndex(p, tag, taggedPages, hasTagIndex) {
 			continue
 		}
 		if !matchesMetadataFilter(p, propertyKey, propertyValue, mode) {
@@ -298,6 +300,76 @@ func matchesTagFilter(p logseq.Page, tag string) bool {
 		}
 	}
 	return false
+}
+
+func matchesTagFilterWithIndex(p logseq.Page, tag string, taggedPages map[string]struct{}, hasIndex bool) bool {
+	tag = normalizeTag(tag)
+	if tag == "" {
+		return true
+	}
+
+	if hasIndex {
+		if pageInNameSet(p, taggedPages) {
+			return true
+		}
+	}
+
+	return matchesTagFilter(p, tag)
+}
+
+func pageInNameSet(p logseq.Page, set map[string]struct{}) bool {
+	if len(set) == 0 {
+		return false
+	}
+
+	candidates := []string{p.Name, p.OriginalName, p.DisplayName()}
+	for _, c := range candidates {
+		k := strings.ToLower(strings.TrimSpace(c))
+		if k == "" {
+			continue
+		}
+		if _, ok := set[k]; ok {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (s *Server) getPageNameSetByTag(ctx context.Context, tag string) (map[string]struct{}, bool) {
+	tag = normalizeTag(tag)
+	if tag == "" {
+		return nil, false
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+
+	query := fmt.Sprintf(
+		"[:find ?pageName :where [?page :block/name ?pageName] [?b :block/page ?page] [?b :block/refs ?r] [?r :block/name \"%s\"]]",
+		escapeDatalogString(tag),
+	)
+	raw, err := s.client.DatascriptQuery(queryCtx, query)
+	if err != nil {
+		return nil, false
+	}
+
+	set := make(map[string]struct{})
+	for _, name := range parseDatalogSingleColumnStrings(raw) {
+		k := strings.ToLower(strings.TrimSpace(name))
+		if k == "" {
+			continue
+		}
+		set[k] = struct{}{}
+	}
+
+	return set, true
+}
+
+func escapeDatalogString(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	return s
 }
 
 func matchesMetadataFilter(p logseq.Page, propertyKey, propertyValue, mode string) bool {

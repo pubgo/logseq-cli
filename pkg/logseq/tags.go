@@ -39,6 +39,18 @@ func (c *Client) GetAllTags(ctx context.Context) ([]string, error) {
 		}
 	}
 
+	// Fallback for Logseq variants where :block/tags is empty but refs are populated.
+	// This may include both hashtag-style tags and page-link style tags.
+	rawRefs, refsErr := c.DatascriptQuery(ctx, "[:find ?name :where [?b :block/refs ?r] [?r :block/name ?name]]")
+	if refsErr == nil {
+		for _, name := range parseSingleColumnStrings(rawRefs) {
+			if !isLikelyTagCandidate(name) {
+				continue
+			}
+			tags[normalizeTag(name)] = struct{}{}
+		}
+	}
+
 	list := make([]string, 0, len(tags))
 	for tag := range tags {
 		if tag != "" {
@@ -159,4 +171,49 @@ func dedupeTagStrings(in []string) []string {
 		out = append(out, tag)
 	}
 	return out
+}
+
+func isLikelyTagCandidate(s string) bool {
+	v := normalizeTag(s)
+	if v == "" {
+		return false
+	}
+
+	if isJournalName(v) {
+		return false
+	}
+
+	r := []rune(v)
+	if len(r) == 1 && strings.ContainsRune(".,;:!?，。；：！？()[]{}<>/\\'\"`~|+-=", r[0]) {
+		return false
+	}
+
+	return true
+}
+
+func isJournalName(v string) bool {
+	if len(v) == 10 {
+		if (v[4] == '-' && v[7] == '-') || (v[4] == '_' && v[7] == '_') {
+			for i := 0; i < len(v); i++ {
+				if i == 4 || i == 7 {
+					continue
+				}
+				if v[i] < '0' || v[i] > '9' {
+					return false
+				}
+			}
+			return true
+		}
+	}
+
+	if len(v) == 8 {
+		for i := 0; i < len(v); i++ {
+			if v[i] < '0' || v[i] > '9' {
+				return false
+			}
+		}
+		return true
+	}
+
+	return false
 }
