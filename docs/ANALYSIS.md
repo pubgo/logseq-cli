@@ -155,21 +155,19 @@ type GraphInfo struct {
 ```
 logseq-cli/
 ├── go.mod
-├── main.go                     # CLI 入口
+├── main.go                     # CLI 入口（根命令与全局参数）
+├── cmds/                       # CLI 子命令定义
+│   ├── cmds.go                 # 共享配置与客户端创建
+│   ├── page.go                 # page list/get/create/delete/rename
+│   ├── block.go                # block get/insert/update/remove/move/prepend/append
+│   └── graph.go                # graph/query/search 命令
 ├── pkg/
 │   └── logseq/                 # Logseq Go SDK
 │       ├── client.go           # HTTP 客户端（底层 RPC 调用）
 │       ├── types.go            # 数据模型定义
 │       ├── editor.go           # Editor 命名空间 API
 │       ├── app.go              # App 命名空间 API
-│       ├── db.go               # DB 命名空间 API（Datalog/DSL 查询）
-│       └── options.go          # 客户端选项（地址、token、超时等）
-├── cmd/                        # CLI 子命令
-│   ├── root.go                 # 根命令（全局 flags）
-│   ├── page.go                 # page list/get/create/delete/rename
-│   ├── block.go                # block get/insert/update/remove/move
-│   ├── graph.go                # graph info
-│   └── query.go                # query run（Datalog 查询）
+│       └── db.go               # DB 命名空间 API（Datalog/DSL 查询）
 └── docs/
     └── ANALYSIS.md             # 本文档
 ```
@@ -269,7 +267,6 @@ logseq
 │   ├── create <name>           # 创建页面
 │   ├── delete <name>           # 删除页面
 │   ├── rename <old> <new>      # 重命名页面
-│   └── properties <name>       # 获取页面属性
 ├── block                       # Block 管理
 │   ├── get <uuid>              # 获取 Block
 │   ├── insert <uuid> <content> # 插入 Block
@@ -283,7 +280,12 @@ logseq
 ├── query                       # 查询
 │   ├── datalog <query>         # Datascript/Datalog 查询
 │   └── dsl <query>             # Logseq DSL 查询
-└── search <query>              # 全文搜索
+├── search <query>              # 全文搜索
+├── completion <shell>          # shell 自动补全
+├── doc                         # 交互式命令文档站
+├── web                         # 可视化命令执行页面
+├── mcp                         # MCP 集成命令
+└── llms-txt                    # LLM 友好文档导出
 ```
 
 ### 5.3 redant 框架核心用法
@@ -394,8 +396,8 @@ func main() {
 
 ## 9. 下一步计划
 
-1. 初始化 Go 模块 (`go mod init github.com/pubgo/logseq-cli`)
-2. 实现 `pkg/logseq` SDK（client + types + editor/app/db）
-3. 基于 redant 构建 CLI 命令树
-4. 编写集成测试（需要运行 Logseq 实例）
-5. 利用 redant 的 MCP 集成能力暴露为 MCP 服务器
+1. 增补与维护中文文档（README / 命令参考 / API 分析）
+2. 增加集成测试与示例脚本（需可连接 Logseq 实例）
+3. 补充错误码与常见故障排查说明
+4. 评估 API 版本差异并提供能力矩阵
+5. 持续完善 MCP 使用场景与示例配置
