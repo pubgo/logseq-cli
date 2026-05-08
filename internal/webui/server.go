@@ -688,6 +688,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	tag := strings.TrimSpace(r.URL.Query().Get("tag"))
 	if q == "" {
 		writeError(w, http.StatusBadRequest, "missing query: q")
 		return
@@ -702,7 +703,86 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if strings.TrimSpace(tag) != "" {
+		pageSet, err := s.getSearchPageSetByTag(ctx, tag)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		result = filterSearchResultByPageSet(result, pageSet)
+	}
+
 	writeOK(w, result)
+}
+
+func (s *Server) getSearchPageSetByTag(ctx context.Context, tag string) (map[string]struct{}, error) {
+	tag = normalizeTag(tag)
+	if tag == "" {
+		return nil, nil
+	}
+
+	if set, ok := s.getPageNameSetByTag(ctx, tag); ok {
+		return set, nil
+	}
+
+	pages, err := s.getAllPages(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	set := make(map[string]struct{})
+	for _, p := range pages {
+		if !matchesTagFilter(p, tag) {
+			continue
+		}
+		for _, name := range []string{p.Name, p.OriginalName, p.DisplayName()} {
+			k := strings.ToLower(strings.TrimSpace(name))
+			if k == "" {
+				continue
+			}
+			set[k] = struct{}{}
+		}
+	}
+
+	return set, nil
+}
+
+func filterSearchResultByPageSet(in *logseq.SearchResult, pageSet map[string]struct{}) *logseq.SearchResult {
+	if in == nil {
+		return nil
+	}
+	if len(pageSet) == 0 {
+		return &logseq.SearchResult{}
+	}
+
+	out := &logseq.SearchResult{
+		Blocks: make([]logseq.SearchBlock, 0, len(in.Blocks)),
+		Pages:  make([]string, 0, len(in.Pages)),
+		Files:  nil, // files usually lack page metadata; hide them under tag filtering to avoid noise.
+	}
+
+	for _, b := range in.Blocks {
+		if pageNameInSet(b.Page, pageSet) {
+			out.Blocks = append(out.Blocks, b)
+		}
+	}
+
+	for _, p := range in.Pages {
+		if pageNameInSet(p, pageSet) {
+			out.Pages = append(out.Pages, p)
+		}
+	}
+
+	return out
+}
+
+func pageNameInSet(name string, set map[string]struct{}) bool {
+	k := strings.ToLower(strings.TrimSpace(name))
+	if k == "" {
+		return false
+	}
+	_, ok := set[k]
+	return ok
 }
 
 type queryRequest struct {

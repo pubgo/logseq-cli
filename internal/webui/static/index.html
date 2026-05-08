@@ -174,10 +174,12 @@
                     <div class="mt-3 space-y-3">
                         <div class="space-y-2">
                             <label class="text-sm text-slate-300">全文搜索</label>
-                            <div class="flex gap-2">
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
                                 <input id="searchQuery"
-                                    class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                                    class="md:col-span-2 px-3 py-2 rounded bg-slate-950 border border-slate-700"
                                     placeholder="输入关键词" />
+                                <input id="searchTag" class="px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                                    placeholder="标签过滤（可选）" />
                                 <button id="btnSearch"
                                     class="px-3 py-2 rounded bg-violet-700 hover:bg-violet-600 text-sm">搜索</button>
                             </div>
@@ -778,20 +780,25 @@
 
         async function search() {
             const q = $("searchQuery").value.trim();
+            const tag = ($("searchTag")?.value || "").trim();
             if (!q) {
                 print("请输入搜索关键词");
                 return;
             }
 
-            const request = { method: "GET", url: `/api/search?q=${encodeURIComponent(q)}` };
+            const params = new URLSearchParams();
+            params.set("q", q);
+            if (tag) params.set("tag", tag);
+
+            const request = { method: "GET", url: `/api/search?${params.toString()}` };
 
             try {
                 const data = await api(request.url);
                 print(data);
-                addHistory("全文搜索", request, true, data);
+                addHistory(tag ? "按标签全文搜索" : "全文搜索", request, true, data);
             } catch (e) {
                 print(`搜索失败: ${e.message}`);
-                addHistory("全文搜索", request, false, e.message);
+                addHistory(tag ? "按标签全文搜索" : "全文搜索", request, false, e.message);
             }
         }
 
