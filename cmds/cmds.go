@@ -9,10 +9,9 @@ import (
 )
 
 var (
-	Token  string
-	Host   string
-	Port   string
-	Output string
+	Token string
+	Host  string
+	Port  string
 )
 
 type StatusResult struct {

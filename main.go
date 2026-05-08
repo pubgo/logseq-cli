@@ -25,6 +25,7 @@ func main() {
 				Envs:        []string{"LOGSEQ_API_TOKEN"},
 				Required:    true,
 				Value:       redant.StringOf(&cmds.Token),
+				Inherit:     true,
 			},
 			{
 				Flag:        "host",
@@ -32,6 +33,7 @@ func main() {
 				Envs:        []string{"LOGSEQ_HOST"},
 				Default:     "127.0.0.1",
 				Value:       redant.StringOf(&cmds.Host),
+				Inherit:     true,
 			},
 			{
 				Flag:        "port",
@@ -40,13 +42,7 @@ func main() {
 				Envs:        []string{"LOGSEQ_PORT"},
 				Default:     "12315",
 				Value:       redant.StringOf(&cmds.Port),
-			},
-			{
-				Flag:        "output",
-				Shorthand:   "o",
-				Description: "Output format: json, text",
-				Default:     "json",
-				Value:       redant.EnumOf(&cmds.Output, "json", "text"),
+				Inherit:     true,
 			},
 		},
 		Children: []*redant.Command{
