@@ -59,6 +59,38 @@
 
 如果返回当前图谱信息（名称、路径、URL），说明配置成功。
 
+## 端到端集成测试（E2E）
+
+项目提供**独立 E2E 可执行模块**：`cmd/e2e`，可直接二进制运行，不依赖 `go test`。
+
+执行方式（需本地 Logseq 已开启 API）：
+
+- 直接运行：`LOGSEQ_API_TOKEN='your-token' go run ./cmd/e2e`
+- 编译后二进制运行：`go build -o ./bin/logseq-e2e ./cmd/e2e && LOGSEQ_API_TOKEN='your-token' ./bin/logseq-e2e`
+- 指定已有 CLI 二进制：`go run ./cmd/e2e --cli-bin ./logseq --token your-token`
+
+常用参数：
+
+- `--token`：API Token（默认读 `LOGSEQ_API_TOKEN`）
+- `--host` / `--port`：默认 `127.0.0.1:12315`
+- `--page-prefix`：临时页面名前缀
+- `--keep-page`：保留测试页面用于排查
+- `--timeout`：单条命令超时时间（默认 `60s`）
+
+覆盖链路：
+
+- `graph info` 连通性检查
+- `page create`
+- `block append/get/update/get/remove`
+- `page delete`
+- `query datalog` 清理校验
+
+说明：
+
+- 若未显式提供 `--cli-bin`，运行器会自动构建当前仓库 CLI 再执行
+- 运行器会优先读取环境变量，也会自动加载项目根目录 `.env`
+- 默认会自动清理临时页面，避免污染现有笔记
+
 ## 全局参数
 
 | 参数              | 环境变量           | 默认值      | 说明                       |
