@@ -59,6 +59,20 @@
 
 如果返回当前图谱信息（名称、路径、URL），说明配置成功。
 
+## LLM / MCP 集成
+
+如果你希望让 LLM 直接操作 Logseq，可使用内置 MCP 服务：
+
+- `logseq mcp serve --transport stdio`
+
+推荐先阅读：`docs/LLM_MCP.md`
+
+其中包含：
+
+- 完整接入步骤
+- Claude Desktop 配置示例
+- 常见报错与排查
+
 ## 端到端集成测试（E2E）
 
 项目提供**独立 E2E 可执行模块**：`cmd/e2e`，可直接二进制运行，不依赖 `go test`。
@@ -192,6 +206,7 @@
 
 - 命令速查与详细参数说明：`docs/COMMANDS.md`
 - API 与实现分析：`docs/ANALYSIS.md`
+- LLM/MCP 接入指南：`docs/LLM_MCP.md`
 
 ## License
 
