@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os/exec"
 	"runtime"
-	"sort"
 	"strings"
 	"time"
 
@@ -193,41 +192,9 @@ func (s *Server) getAllPages(ctx context.Context) ([]logseq.Page, error) {
 }
 
 func (s *Server) getAllTags(ctx context.Context) ([]string, error) {
-	tags := make(map[string]struct{})
-
 	queryCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-
-	raw, err := s.client.DatascriptQuery(queryCtx, "[:find ?name :where [?b :block/tags ?t] [?t :block/name ?name]]")
-	if err == nil {
-		for _, tag := range parseDatalogSingleColumnStrings(raw) {
-			if tag == "" {
-				continue
-			}
-			tags[strings.ToLower(tag)] = struct{}{}
-		}
-	}
-
-	pages, pagesErr := s.getAllPages(ctx)
-	if pagesErr != nil && len(tags) == 0 {
-		return nil, pagesErr
-	}
-
-	for _, p := range pages {
-		for _, tag := range extractTagsFromPage(p) {
-			if tag == "" {
-				continue
-			}
-			tags[strings.ToLower(tag)] = struct{}{}
-		}
-	}
-
-	list := make([]string, 0, len(tags))
-	for tag := range tags {
-		list = append(list, tag)
-	}
-	sort.Strings(list)
-	return list, nil
+	return s.client.GetAllTags(queryCtx)
 }
 
 func parseDatalogSingleColumnStrings(raw json.RawMessage) []string {

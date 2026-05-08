@@ -178,6 +178,14 @@
 
 ---
 
+## tag：标签管理
+
+### `logseq tag list`
+
+列出当前图谱中的全部标签。
+
+---
+
 ## completion：自动补全
 
 ### `logseq completion <shell>`

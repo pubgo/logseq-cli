@@ -158,6 +158,7 @@ logseq-cli/
 ├── cmds/                       # CLI 子命令定义
 │   ├── cmds.go                 # 共享配置与客户端创建
 │   ├── page.go                 # page list/get/create/delete/rename
+│   ├── tag.go                  # tag list
 │   ├── block.go                # block get/insert/update/remove/move/prepend/append
 │   └── graph.go                # graph/query/search 命令
 ├── pkg/
@@ -281,6 +282,8 @@ logseq
 │   ├── datalog <query>         # Datascript/Datalog 查询
 │   └── dsl <query>             # Logseq DSL 查询
 ├── search <query>              # 全文搜索
+├── tag                         # 标签管理
+│   └── list                    # 列出所有标签
 ├── completion <shell>          # shell 自动补全
 ├── doc                         # 交互式命令文档站
 ├── web                         # 可视化命令执行页面

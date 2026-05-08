@@ -55,6 +55,7 @@ func main() {
 			cmds.GraphCmd(),
 			cmds.QueryCmd(),
 			cmds.SearchCmd(),
+			cmds.TagCmd(),
 			cmds.WebUICmd(),
 			llmstxtcmd.New(),
 			doccmd.New(),

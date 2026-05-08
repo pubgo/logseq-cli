@@ -7,6 +7,7 @@
 ## 功能特性
 
 - 页面管理：列出、获取、创建、删除、重命名页面
+- 标签管理：列出全部标签
 - 块管理：获取、插入、更新、删除、移动、页面头尾追加
 - 查询能力：Datalog / Logseq DSL
 - 图谱信息：查看当前 Graph 元数据
@@ -151,6 +152,10 @@
 
 - `logseq search <query>`
 
+### 标签（tag）
+
+- `logseq tag list`
+
 ### 其他能力
 
 - `logseq completion <bash|zsh|fish>`
@@ -170,6 +175,7 @@
 - 更新块内容：`logseq block update <uuid> "- [x] 第一阶段完成"`
 - 执行 Datalog 查询：`logseq query datalog '[:find ?p :where [?b :block/name ?p]]'`
 - 全文搜索：`logseq search "Go SDK"`
+- 查看全部标签：`logseq tag list`
 - 启动 webui：`logseq webui --addr 127.0.0.1:18090 --open true`
 
 ## WebUI 过滤能力（标签 + 元数据）
