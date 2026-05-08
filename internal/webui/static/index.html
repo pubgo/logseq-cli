@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>logseq-cli 简易 Web 验证台</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+    <div class="max-w-7xl mx-auto p-4 md:p-6 space-y-4">
+        <header class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+            <h1 class="text-lg md:text-xl font-semibold">logseq-cli 简易 Web 验证台</h1>
+            <p class="text-sm text-slate-400 mt-1">用于快速操作 Logseq 数据：页面、块、搜索、查询。内置最近操作回放，适合手工联调与回归验证。</p>
+            <div class="mt-3 flex flex-wrap gap-2">
+                <button id="btnHealth" class="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-sm">健康检查</button>
+                <button id="btnGraph" class="px-3 py-1.5 rounded bg-blue-700 hover:bg-blue-600 text-sm">获取 Graph
+                    信息</button>
+                <button id="btnPages"
+                    class="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-sm">刷新页面列表</button>
+                <button id="btnConnection"
+                    class="px-3 py-1.5 rounded bg-teal-700 hover:bg-teal-600 text-sm">连接信息</button>
+            </div>
+            <pre id="connectionInfo"
+                class="mt-3 text-xs bg-slate-950 border border-slate-800 rounded p-3 overflow-auto">(连接信息加载中...)</pre>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <section class="lg:col-span-1 rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+                <h2 class="font-semibold">页面列表</h2>
+                <div class="text-xs text-slate-400">点击页面名查看详情（含块树）</div>
+                <div id="pages" class="space-y-1 max-h-[360px] overflow-auto pr-1"></div>
+            </section>
+
+            <section class="lg:col-span-2 rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-4">
+                <h2 class="font-semibold">页面操作</h2>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <label class="text-sm space-y-1">
+                        <span class="text-slate-300">创建页面名</span>
+                        <input id="createPageName" class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                            placeholder="例如：WebUI 验证页" />
+                    </label>
+
+                    <label class="text-sm space-y-1">
+                        <span class="text-slate-300">当前页面</span>
+                        <input id="currentPageName"
+                            class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                            placeholder="点击左侧页面可自动填充" />
+                    </label>
+                </div>
+
+                <div class="flex flex-wrap gap-2">
+                    <button id="btnCreatePage"
+                        class="px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600 text-sm">创建页面</button>
+                    <button id="btnLoadPage"
+                        class="px-3 py-1.5 rounded bg-blue-700 hover:bg-blue-600 text-sm">加载页面详情</button>
+                    <button id="btnDeletePage"
+                        class="px-3 py-1.5 rounded bg-rose-700 hover:bg-rose-600 text-sm">删除当前页面</button>
+                </div>
+
+                <h3 class="font-semibold pt-2 border-t border-slate-800">块操作</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <label class="text-sm space-y-1 md:col-span-2">
+                        <span class="text-slate-300">追加块内容（append）</span>
+                        <textarea id="appendContent" rows="3"
+                            class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                            placeholder="例如：- [ ] 来自 webui 的测试条目"></textarea>
+                    </label>
+
+                    <button id="btnAppendBlock"
+                        class="px-3 py-1.5 rounded bg-cyan-700 hover:bg-cyan-600 text-sm w-fit">追加到当前页面</button>
+
+                    <div></div>
+
+                    <label class="text-sm space-y-1">
+                        <span class="text-slate-300">更新块 UUID</span>
+                        <input id="updateUUID" class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                            placeholder="粘贴块 uuid" />
+                    </label>
+
+                    <label class="text-sm space-y-1">
+                        <span class="text-slate-300">更新后内容</span>
+                        <input id="updateContent" class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                            placeholder="新的块内容" />
+                    </label>
+
+                    <div class="flex gap-2 md:col-span-2">
+                        <button id="btnUpdateBlock"
+                            class="px-3 py-1.5 rounded bg-amber-700 hover:bg-amber-600 text-sm">更新块</button>
+                        <button id="btnRemoveBlock"
+                            class="px-3 py-1.5 rounded bg-rose-700 hover:bg-rose-600 text-sm">删除块</button>
+                    </div>
+                </div>
+
+                <h3 class="font-semibold pt-2 border-t border-slate-800">搜索</h3>
+                <div class="flex gap-2">
+                    <input id="searchQuery" class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                        placeholder="输入关键词" />
+                    <button id="btnSearch"
+                        class="px-3 py-2 rounded bg-violet-700 hover:bg-violet-600 text-sm">搜索</button>
+                </div>
+
+                <h3 class="font-semibold pt-2 border-t border-slate-800">查询（Datalog / DSL）</h3>
+                <div class="space-y-2">
+                    <textarea id="queryText" rows="4"
+                        class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                        placeholder="例如：[:find ?p :where [?b :block/name ?p]]"></textarea>
+                    <div class="flex gap-2">
+                        <button id="btnQueryDatalog" class="px-3 py-2 rounded bg-teal-700 hover:bg-teal-600 text-sm">执行
+                            Datalog</button>
+                        <button id="btnQueryDSL" class="px-3 py-2 rounded bg-sky-700 hover:bg-sky-600 text-sm">执行
+                            DSL</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <section class="lg:col-span-2 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                <h2 class="font-semibold">结果输出</h2>
+                <pre id="output"
+                    class="mt-3 text-xs bg-slate-950 border border-slate-800 rounded p-3 overflow-auto max-h-[500px]">(暂无)</pre>
+            </section>
+
+            <section class="lg:col-span-1 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                <div class="flex items-center justify-between">
+                    <h2 class="font-semibold">最近操作（可回放）</h2>
+                    <button id="btnClearHistory"
+                        class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600">清空</button>
+                </div>
+                <div id="history" class="mt-3 space-y-2 max-h-[500px] overflow-auto"></div>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        const $ = (id) => document.getElementById(id);
+
+        const output = $("output");
+        const pagesBox = $("pages");
+        const historyBox = $("history");
+        const connectionInfoBox = $("connectionInfo");
+        const actionHistory = [];
+        const maxHistory = 20;
+
+        function print(data) {
+            if (typeof data === "string") {
+                output.textContent = data;
+                return;
+            }
+            output.textContent = JSON.stringify(data, null, 2);
+        }
+
+        function renderConnectionInfo(data) {
+            if (!data || typeof data !== "object") {
+                connectionInfoBox.textContent = "(连接信息不可用)";
+                return;
+            }
+
+            const tokenState = data.tokenConfigured ? "已配置" : "未配置";
+            const lines = [
+                `baseURL       : ${data.baseURL || ""}`,
+                `host          : ${data.host || ""} (${data.hostSource || "unknown"})`,
+                `port          : ${data.port || ""} (${data.portSource || "unknown"})`,
+                `token         : ${tokenState} (${data.tokenSource || "unknown"})`,
+            ];
+            connectionInfoBox.textContent = lines.join("\n");
+        }
+
+        function nowText() {
+            return new Date().toLocaleTimeString("zh-CN", { hour12: false });
+        }
+
+        function preview(data) {
+            if (typeof data === "string") {
+                return data.length > 120 ? data.slice(0, 120) + " ..." : data;
+            }
+            try {
+                const text = JSON.stringify(data);
+                return text.length > 120 ? text.slice(0, 120) + " ..." : text;
+            } catch (_) {
+                return String(data);
+            }
+        }
+
+        function addHistory(action, request, ok, result) {
+            actionHistory.unshift({
+                time: nowText(),
+                action,
+                request,
+                ok,
+                result,
+            });
+            if (actionHistory.length > maxHistory) {
+                actionHistory.length = maxHistory;
+            }
+            renderHistory();
+        }
+
+        function buildReplayFetchOptions(req) {
+            const opts = {};
+            const method = (req.method || "GET").toUpperCase();
+            if (method !== "GET") {
+                opts.method = method;
+                opts.body = req.body || "";
+            }
+            return opts;
+        }
+
+        async function replayHistory(index) {
+            const item = actionHistory[index];
+            if (!item) return;
+
+            const req = item.request || {};
+            const options = buildReplayFetchOptions(req);
+            try {
+                const data = await api(req.url, options);
+                print(data);
+                addHistory(item.action + "（回放）", req, true, data);
+            } catch (e) {
+                print(`回放失败: ${e.message}`);
+                addHistory(item.action + "（回放）", req, false, e.message);
+            }
+        }
+
+        function renderHistory() {
+            historyBox.innerHTML = "";
+            if (actionHistory.length === 0) {
+                const empty = document.createElement("div");
+                empty.className = "text-xs text-slate-400";
+                empty.textContent = "暂无历史";
+                historyBox.appendChild(empty);
+                return;
+            }
+
+            actionHistory.forEach((item, idx) => {
+                const card = document.createElement("div");
+                card.className = "rounded border border-slate-800 bg-slate-950/60 p-2";
+
+                const top = document.createElement("div");
+                top.className = "flex items-center justify-between gap-2";
+
+                const title = document.createElement("div");
+                title.className = "text-xs font-medium";
+                title.textContent = `${item.time} · ${item.action}`;
+
+                const status = document.createElement("span");
+                status.className = "text-[10px] px-1.5 py-0.5 rounded " + (item.ok ? "bg-emerald-800 text-emerald-200" : "bg-rose-800 text-rose-200");
+                status.textContent = item.ok ? "OK" : "ERR";
+
+                top.appendChild(title);
+                top.appendChild(status);
+
+                const req = document.createElement("div");
+                req.className = "text-[11px] text-slate-400 mt-1 font-mono";
+                req.textContent = `${(item.request.method || "GET").toUpperCase()} ${item.request.url || ""}`;
+
+                const res = document.createElement("div");
+                res.className = "text-[11px] text-slate-300 mt-1";
+                res.textContent = preview(item.result);
+
+                const replayBtn = document.createElement("button");
+                replayBtn.className = "mt-2 text-[11px] px-2 py-1 rounded bg-slate-700 hover:bg-slate-600";
+                replayBtn.textContent = "回放";
+                replayBtn.onclick = () => replayHistory(idx);
+
+                card.appendChild(top);
+                card.appendChild(req);
+                card.appendChild(res);
+                card.appendChild(replayBtn);
+                historyBox.appendChild(card);
+            });
+        }
+
+        async function api(url, options = {}) {
+            const resp = await fetch(url, {
+                headers: { "Content-Type": "application/json" },
+                ...options,
+            });
+
+            const body = await resp.json().catch(() => ({ ok: false, error: "invalid response" }));
+            if (!resp.ok || body.ok === false) {
+                const err = body.error || `request failed (${resp.status})`;
+                throw new Error(typeof err === "string" ? err : JSON.stringify(err));
+            }
+            return body.data;
+        }
+
+        async function refreshPages(needRecord = true) {
+            const request = { method: "GET", url: "/api/pages" };
+            try {
+                const pages = await api("/api/pages");
+                pagesBox.innerHTML = "";
+                pages
+                    .sort((a, b) => (a.originalName || a.name || "").localeCompare(b.originalName || b.name || ""))
+                    .forEach((p) => {
+                        const name = p.originalName || p.name || "(unnamed)";
+                        const btn = document.createElement("button");
+                        btn.className = "w-full text-left px-2 py-1 rounded hover:bg-slate-800 text-sm";
+                        btn.textContent = name;
+                        btn.onclick = async () => {
+                            $("currentPageName").value = name;
+                            await loadPage();
+                        };
+                        pagesBox.appendChild(btn);
+                    });
+
+                print({ message: `pages loaded: ${pages.length}` });
+                if (needRecord) addHistory("刷新页面列表", request, true, { count: pages.length });
+            } catch (e) {
+                print(`刷新页面失败: ${e.message}`);
+                if (needRecord) addHistory("刷新页面列表", request, false, e.message);
+            }
+        }
+
+        async function loadPage(needRecord = true) {
+            const name = $("currentPageName").value.trim();
+            if (!name) {
+                print("请先输入页面名");
+                return;
+            }
+            const request = { method: "GET", url: `/api/page?name=${encodeURIComponent(name)}` };
+
+            try {
+                const data = await api(request.url);
+                print(data);
+                if (needRecord) addHistory("加载页面详情", request, true, data);
+            } catch (e) {
+                print(`加载页面失败: ${e.message}`);
+                if (needRecord) addHistory("加载页面详情", request, false, e.message);
+            }
+        }
+
+        async function createPage() {
+            const name = $("createPageName").value.trim();
+            if (!name) {
+                print("请先输入创建页面名");
+                return;
+            }
+
+            const request = {
+                method: "POST",
+                url: "/api/page",
+                body: JSON.stringify({ name }),
+            };
+
+            try {
+                const data = await api(request.url, { method: request.method, body: request.body });
+                $("currentPageName").value = name;
+                print(data);
+                addHistory("创建页面", request, true, data);
+                await refreshPages(false);
+            } catch (e) {
+                print(`创建页面失败: ${e.message}`);
+                addHistory("创建页面", request, false, e.message);
+            }
+        }
+
+        async function deletePage() {
+            const name = $("currentPageName").value.trim();
+            if (!name) {
+                print("请先输入当前页面名");
+                return;
+            }
+            if (!confirm(`确认删除页面: ${name} ?`)) {
+                return;
+            }
+
+            const request = {
+                method: "DELETE",
+                url: `/api/page?name=${encodeURIComponent(name)}`,
+            };
+
+            try {
+                const data = await api(request.url, { method: request.method });
+                print(data);
+                addHistory("删除页面", request, true, data);
+                await refreshPages(false);
+            } catch (e) {
+                print(`删除页面失败: ${e.message}`);
+                addHistory("删除页面", request, false, e.message);
+            }
+        }
+
+        async function appendBlock() {
+            const page = $("currentPageName").value.trim();
+            const content = $("appendContent").value.trim();
+            if (!page || !content) {
+                print("当前页面和追加内容都不能为空");
+                return;
+            }
+
+            const request = {
+                method: "POST",
+                url: "/api/block/append",
+                body: JSON.stringify({ page, content }),
+            };
+
+            try {
+                const data = await api(request.url, { method: request.method, body: request.body });
+                if (data && data.uuid) {
+                    $("updateUUID").value = data.uuid;
+                }
+                print(data);
+                addHistory("追加块", request, true, data);
+                await loadPage(false);
+            } catch (e) {
+                print(`追加块失败: ${e.message}`);
+                addHistory("追加块", request, false, e.message);
+            }
+        }
+
+        async function updateBlock() {
+            const uuid = $("updateUUID").value.trim();
+            const content = $("updateContent").value.trim();
+            if (!uuid || !content) {
+                print("更新块需要 uuid 和 content");
+                return;
+            }
+
+            const request = {
+                method: "POST",
+                url: "/api/block/update",
+                body: JSON.stringify({ uuid, content }),
+            };
+
+            try {
+                const data = await api(request.url, { method: request.method, body: request.body });
+                print(data);
+                addHistory("更新块", request, true, data);
+                await loadPage(false);
+            } catch (e) {
+                print(`更新块失败: ${e.message}`);
+                addHistory("更新块", request, false, e.message);
+            }
+        }
+
+        async function removeBlock() {
+            const uuid = $("updateUUID").value.trim();
+            if (!uuid) {
+                print("删除块需要 uuid");
+                return;
+            }
+            if (!confirm(`确认删除块: ${uuid} ?`)) {
+                return;
+            }
+
+            const request = {
+                method: "POST",
+                url: "/api/block/remove",
+                body: JSON.stringify({ uuid }),
+            };
+
+            try {
+                const data = await api(request.url, { method: request.method, body: request.body });
+                print(data);
+                addHistory("删除块", request, true, data);
+                await loadPage(false);
+            } catch (e) {
+                print(`删除块失败: ${e.message}`);
+                addHistory("删除块", request, false, e.message);
+            }
+        }
+
+        async function search() {
+            const q = $("searchQuery").value.trim();
+            if (!q) {
+                print("请输入搜索关键词");
+                return;
+            }
+
+            const request = { method: "GET", url: `/api/search?q=${encodeURIComponent(q)}` };
+
+            try {
+                const data = await api(request.url);
+                print(data);
+                addHistory("全文搜索", request, true, data);
+            } catch (e) {
+                print(`搜索失败: ${e.message}`);
+                addHistory("全文搜索", request, false, e.message);
+            }
+        }
+
+        async function runDatalogQuery() {
+            const query = $("queryText").value.trim();
+            if (!query) {
+                print("请输入 Datalog 查询语句");
+                return;
+            }
+
+            const request = {
+                method: "POST",
+                url: "/api/query/datalog",
+                body: JSON.stringify({ query }),
+            };
+
+            try {
+                const data = await api(request.url, { method: request.method, body: request.body });
+                print(data);
+                addHistory("执行 Datalog", request, true, data);
+            } catch (e) {
+                print(`Datalog 查询失败: ${e.message}`);
+                addHistory("执行 Datalog", request, false, e.message);
+            }
+        }
+
+        async function runDSLQuery() {
+            const query = $("queryText").value.trim();
+            if (!query) {
+                print("请输入 DSL 查询语句");
+                return;
+            }
+
+            const request = {
+                method: "POST",
+                url: "/api/query/dsl",
+                body: JSON.stringify({ query }),
+            };
+
+            try {
+                const data = await api(request.url, { method: request.method, body: request.body });
+                print(data);
+                addHistory("执行 DSL", request, true, data);
+            } catch (e) {
+                print(`DSL 查询失败: ${e.message}`);
+                addHistory("执行 DSL", request, false, e.message);
+            }
+        }
+
+        async function runHealth() {
+            const request = { method: "GET", url: "/api/health" };
+            try {
+                const data = await api(request.url);
+                print(data);
+                addHistory("健康检查", request, true, data);
+            } catch (e) {
+                print(`健康检查失败: ${e.message}`);
+                addHistory("健康检查", request, false, e.message);
+            }
+        }
+
+        async function runGraph() {
+            const request = { method: "GET", url: "/api/graph" };
+            try {
+                const data = await api(request.url);
+                print(data);
+                addHistory("获取 Graph 信息", request, true, data);
+            } catch (e) {
+                print(`获取 Graph 信息失败: ${e.message}`);
+                addHistory("获取 Graph 信息", request, false, e.message);
+            }
+        }
+
+        async function loadConnectionInfo(needRecord = true, needPrint = false) {
+            const request = { method: "GET", url: "/api/connection" };
+            try {
+                const data = await api(request.url);
+                renderConnectionInfo(data);
+                if (needPrint) {
+                    print(data);
+                }
+                if (needRecord) {
+                    addHistory("查看连接信息", request, true, data);
+                }
+            } catch (e) {
+                connectionInfoBox.textContent = `连接信息加载失败: ${e.message}`;
+                if (needPrint) {
+                    print(`连接信息加载失败: ${e.message}`);
+                }
+                if (needRecord) {
+                    addHistory("查看连接信息", request, false, e.message);
+                }
+            }
+        }
+
+        $("btnHealth").onclick = runHealth;
+        $("btnGraph").onclick = runGraph;
+        $("btnPages").onclick = refreshPages;
+        $("btnConnection").onclick = () => loadConnectionInfo(true, true);
+        $("btnCreatePage").onclick = createPage;
+        $("btnLoadPage").onclick = loadPage;
+        $("btnDeletePage").onclick = deletePage;
+        $("btnAppendBlock").onclick = appendBlock;
+        $("btnUpdateBlock").onclick = updateBlock;
+        $("btnRemoveBlock").onclick = removeBlock;
+        $("btnSearch").onclick = search;
+        $("btnQueryDatalog").onclick = runDatalogQuery;
+        $("btnQueryDSL").onclick = runDSLQuery;
+        $("btnClearHistory").onclick = () => {
+            actionHistory.length = 0;
+            renderHistory();
+            print("历史已清空");
+        };
+
+        renderHistory();
+        loadConnectionInfo(false, false);
+        refreshPages(false);
+    </script>
+</body>
+
+</html>
