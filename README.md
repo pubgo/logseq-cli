@@ -14,7 +14,7 @@
 - 开发者增强：
 	- `doc`：启动交互式命令文档站
 	- `web`：打开可视化命令执行页面
-	- `webui`：启动简化 Logseq 操作页面（页面/块/搜索/查询 + 最近操作回放 + 连接信息诊断）
+	- `webui`：启动简化 Logseq 操作页面（页面/块/搜索/查询 + 标签列表 + 元数据过滤 + 最近操作回放 + 连接信息诊断）
 	- `mcp`：以 MCP 方式暴露命令树
 	- `completion`：生成 shell 自动补全
 
@@ -170,6 +170,22 @@
 - 更新块内容：`logseq block update <uuid> "- [x] 第一阶段完成"`
 - 执行 Datalog 查询：`logseq query datalog '[:find ?p :where [?b :block/name ?p]]'`
 - 全文搜索：`logseq search "Go SDK"`
+- 启动 webui：`logseq webui --addr 127.0.0.1:18090 --open true`
+
+## WebUI 过滤能力（标签 + 元数据）
+
+`webui` 页面左侧支持组合过滤，便于快速定位页面：
+
+- 标签过滤（来自 `/api/tags`）
+- 页面名模糊匹配（`name`）
+- 元数据键值过滤（`property` + `value`）
+- 匹配模式：`contains` / `equals`
+- 是否包含 Journal 页面（`includeJournal=true|false`）
+
+对应后端接口：
+
+- `GET /api/tags`
+- `GET /api/pages/filter?tag=&name=&property=&value=&mode=contains&includeJournal=true`
 
 ## 输出说明
 

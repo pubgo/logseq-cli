@@ -216,6 +216,25 @@
 
 ---
 
+## webui：简易 Logseq 操作台
+
+### `logseq webui`
+
+启动专注于 Logseq 数据验证的轻量页面，支持页面/块操作、搜索、Datalog/DSL 查询、历史回放与连接诊断。
+
+选项：
+
+- `--addr`（string，默认 `127.0.0.1:18090`）：监听地址
+- `--open`（bool，默认 `true`）：启动后自动打开浏览器
+
+页面内置过滤能力（由 webui 后端提供）：
+
+- `GET /api/tags`：获取标签列表
+- `GET /api/pages/filter`：按标签、页面名、元数据键值过滤页面
+	- 查询参数：`tag`、`name`、`property`、`value`、`mode(contains|equals)`、`includeJournal(true|false)`
+
+---
+
 ## mcp：MCP 集成
 
 ### `logseq mcp list`

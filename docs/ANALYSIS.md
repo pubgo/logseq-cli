@@ -59,7 +59,7 @@ Logseq 桌面版内建了 HTTP API Server，通过 JSON-RPC 风格调用暴露�
 | --------------------- | --------------------------------- | ------------- | ------------------------------------------------------ |
 | `getBlock`            | `[uuid, {includeChildren: bool}]` | `Block`       | 获取单个 Block                                         |
 | `insertBlock`         | `[targetUUID, content, options?]` | `Block`       | 插入 Block。options: `{sibling: bool, properties: {}}` |
-| `insertBatchBlock`    | `[srcUUID, blocks[], options?]`   | `[]Block`     | 批量插入 Block 树。options: `{sibling: bool}`          |
+| `insertBatchBlock`    | `[srcUUID, blocks[], {sibling}]`  | `null`        | 批量插入 Block 树（当前 SDK 暴露 `sibling bool` 参数） |
 | `updateBlock`         | `[uuid, content]`                 | `Block\|null` | 更新 Block 内容                                        |
 | `removeBlock`         | `[uuid]`                          | `null`        | 删除 Block                                             |
 | `moveBlock`           | `[srcUUID, targetUUID, options?]` | —             | 移动 Block                                             |
@@ -74,19 +74,19 @@ Logseq 桌面版内建了 HTTP API Server，通过 JSON-RPC 风格调用暴露�
 
 ### 2.2 App 命名空间 (`logseq.App.*`)
 
-| 方法                | 参数                | 返回           | 说明                             |
-| ------------------- | ------------------- | -------------- | -------------------------------- |
-| `getCurrentGraph`   | `[]`                | `GraphInfo`    | 获取当前图谱信息                 |
-| `getStateFromStore` | `[key]`             | `any`          | 获取应用状态                     |
-| `getUserConfigs`    | `[]`                | `Config`       | 获取用户配置                     |
-| `search`            | `[query, options?]` | `SearchResult` | 全文搜索（⚠️ 部分版本可能不可用） |
+| 方法                | 参数      | 返回           | 说明                             |
+| ------------------- | --------- | -------------- | -------------------------------- |
+| `getCurrentGraph`   | `[]`      | `GraphInfo`    | 获取当前图谱信息                 |
+| `getStateFromStore` | `[key]`   | `any`          | 获取应用状态                     |
+| `getUserConfigs`    | `[]`      | `Config`       | 获取用户配置                     |
+| `search`            | `[query]` | `SearchResult` | 全文搜索（⚠️ 部分版本可能不可用） |
 
 ### 2.3 DB 命名空间 (`logseq.DB.*`)
 
-| 方法              | 参数                  | 返回      | 说明                 |
-| ----------------- | --------------------- | --------- | -------------------- |
-| `datascriptQuery` | `[query, ...inputs?]` | `[][]any` | 执行 Datalog 查询    |
-| `q`               | `[dslQuery]`          | `any`     | 执行 Logseq DSL 查询 |
+| 方法              | 参数                  | 返回              | 说明                              |
+| ----------------- | --------------------- | ----------------- | --------------------------------- |
+| `datascriptQuery` | `[query, ...inputs?]` | `json.RawMessage` | 执行 Datalog 查询（原始 JSON）    |
+| `q`               | `[dslQuery]`          | `json.RawMessage` | 执行 Logseq DSL 查询（原始 JSON） |
 
 ### 2.4 已确认不可用的方法
 
@@ -110,7 +110,6 @@ type Page struct {
     Properties   map[string]any    `json:"properties,omitempty"`
     IsJournal    bool              `json:"journal?"`
     JournalDay   int               `json:"journalDay,omitempty"`
-    Namespace    *Namespace        `json:"namespace,omitempty"`
     CreatedAt    int64             `json:"createdAt,omitempty"`
     UpdatedAt    int64             `json:"updatedAt,omitempty"`
 }
@@ -192,8 +191,8 @@ type Client struct {
 // NewClient 创建 Logseq API 客户端
 func NewClient(opts ...Option) *Client
 
-// callAPI 是底层 JSON-RPC 调用
-func (c *Client) callAPI(ctx context.Context, method string, args []any) (json.RawMessage, error)
+// CallAPI 是底层 JSON-RPC 调用
+func (c *Client) CallAPI(ctx context.Context, method string, args ...any) (json.RawMessage, error)
 ```
 
 ### 4.3 Editor API 封装
@@ -206,17 +205,18 @@ func (c *Client) CreatePage(ctx context.Context, name string, properties map[str
 func (c *Client) DeletePage(ctx context.Context, name string) error
 func (c *Client) RenamePage(ctx context.Context, oldName, newName string) error
 func (c *Client) GetPageBlocksTree(ctx context.Context, nameOrUUID string) ([]Block, error)
-func (c *Client) GetPageLinkedReferences(ctx context.Context, name string) ([]any, error)
+func (c *Client) GetPageLinkedReferences(ctx context.Context, name string) (json.RawMessage, error)
 func (c *Client) GetPagesFromNamespace(ctx context.Context, ns string) ([]Page, error)
-func (c *Client) SetPageProperties(ctx context.Context, name string, props map[string]any) error
+func (c *Client) GetPagesTreeFromNamespace(ctx context.Context, namespace string) (json.RawMessage, error)
+func (c *Client) SetPageProperties(ctx context.Context, name string, properties map[string]any) error
 
 // === Block 操作 ===
 func (c *Client) GetBlock(ctx context.Context, uuid string, includeChildren bool) (*Block, error)
 func (c *Client) InsertBlock(ctx context.Context, targetUUID, content string, opts *InsertBlockOptions) (*Block, error)
-func (c *Client) InsertBatchBlock(ctx context.Context, srcUUID string, blocks []BatchBlock, opts *BatchBlockOptions) error
+func (c *Client) InsertBatchBlock(ctx context.Context, srcUUID string, blocks []BatchBlock, sibling bool) error
 func (c *Client) UpdateBlock(ctx context.Context, uuid, content string) error
 func (c *Client) RemoveBlock(ctx context.Context, uuid string) error
-func (c *Client) MoveBlock(ctx context.Context, srcUUID, targetUUID string, opts *MoveBlockOptions) error
+func (c *Client) MoveBlock(ctx context.Context, srcUUID, targetUUID string, opts map[string]any) error
 func (c *Client) PrependBlockInPage(ctx context.Context, page, content string) (*Block, error)
 func (c *Client) AppendBlockInPage(ctx context.Context, page, content string) (*Block, error)
 func (c *Client) UpsertBlockProperty(ctx context.Context, uuid, key string, value any) error
@@ -234,14 +234,14 @@ func (c *Client) GetCurrentBlock(ctx context.Context) (*Block, error)
 ```go
 func (c *Client) GetCurrentGraph(ctx context.Context) (*GraphInfo, error)
 func (c *Client) GetUserConfigs(ctx context.Context) (map[string]any, error)
-func (c *Client) Search(ctx context.Context, query string, opts *SearchOptions) (*SearchResult, error)
+func (c *Client) Search(ctx context.Context, query string) (*SearchResult, error)
 ```
 
 ### 4.5 DB API 封装
 
 ```go
-func (c *Client) DatascriptQuery(ctx context.Context, query string, inputs ...any) ([][]any, error)
-func (c *Client) DSLQuery(ctx context.Context, query string) (any, error)
+func (c *Client) DatascriptQuery(ctx context.Context, query string, inputs ...any) (json.RawMessage, error)
+func (c *Client) DSLQuery(ctx context.Context, query string) (json.RawMessage, error)
 ```
 
 ---
@@ -284,6 +284,7 @@ logseq
 ├── completion <shell>          # shell 自动补全
 ├── doc                         # 交互式命令文档站
 ├── web                         # 可视化命令执行页面
+├── webui                       # 简易 Logseq 操作台（页面/块/搜索/查询/过滤）
 ├── mcp                         # MCP 集成命令
 └── llms-txt                    # LLM 友好文档导出
 ```
