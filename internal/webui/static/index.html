@@ -7,6 +7,94 @@
   <title>logseq-cli WebUI</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    .outline-tree .outline-node {
+      position: relative;
+    }
+
+    .outline-tree .outline-node::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: rgba(100, 116, 139, 0.15);
+    }
+
+    .outline-tree .outline-node:last-child::before {
+      bottom: 50%;
+    }
+
+    .outline-node .bullet-dot {
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    .outline-node:hover>.outline-row>.outline-bullet .bullet-dot {
+      transform: scale(1.4);
+      box-shadow: 0 0 6px rgba(99, 102, 241, 0.4);
+    }
+
+    .outline-actions {
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    .outline-node:hover>.outline-row .outline-actions {
+      opacity: 1;
+    }
+
+    .md-content img {
+      max-width: 100%;
+      border-radius: 6px;
+      margin: 4px 0;
+    }
+
+    .md-content ul,
+    .md-content ol {
+      padding-left: 1.2em;
+      margin: 2px 0;
+    }
+
+    .md-content li {
+      list-style: disc;
+    }
+
+    .md-content ol li {
+      list-style: decimal;
+    }
+
+    .md-content blockquote {
+      border-left: 2px solid #475569;
+      padding-left: 8px;
+      color: #94a3b8;
+      margin: 2px 0;
+    }
+
+    .md-content pre.code-block {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin: 4px 0;
+      overflow-x: auto;
+      font-size: 11px;
+    }
+
+    .md-content hr {
+      border: none;
+      border-top: 1px solid #334155;
+      margin: 6px 0;
+    }
+
+    .md-content .task-check {
+      width: 13px;
+      height: 13px;
+      margin-right: 4px;
+      vertical-align: middle;
+      accent-color: #10b981;
+    }
+  </style>
 </head>
 
 <body class="bg-slate-950 text-slate-100 min-h-screen">
@@ -212,81 +300,122 @@
 
           <!-- Page outline view -->
           <div x-show="pageBlocks.length||pageDetail"
-            class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+            class="rounded-xl border border-slate-800 bg-[#0c1222] p-5 space-y-4">
             <!-- Page title & metadata -->
             <div class="flex items-center justify-between">
-              <div class="flex items-center gap-2">
-                <span class="font-bold text-lg text-slate-50" x-text="pageDetail?.name||currentPage||''"></span>
-                <span class="text-xs text-slate-500" x-text="pageBlocks.length?pageBlocks.length+' 块':''"></span>
+              <div class="flex items-baseline gap-3">
+                <h2 class="font-bold text-xl text-slate-50 tracking-tight" x-text="pageDetail?.name||currentPage||''">
+                </h2>
+                <span class="text-[11px] text-slate-500 tabular-nums"
+                  x-text="pageBlocks.length?pageBlocks.length+' blocks':''"></span>
               </div>
-              <button class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600"
-                @click="pageBlocks=[];pageDetail=null">收起</button>
+              <div class="flex items-center gap-2">
+                <button
+                  class="text-xs px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700/50 text-slate-400 hover:text-slate-200 transition-colors"
+                  @click="loadPage()">↻</button>
+                <button
+                  class="text-xs px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700/50 text-slate-400 hover:text-slate-200 transition-colors"
+                  @click="pageBlocks=[];pageDetail=null">收起</button>
+              </div>
             </div>
 
             <!-- Page properties -->
             <template x-if="pageDetail?.properties?.length">
-              <div class="border-b border-slate-800 pb-3 space-y-0.5">
-                <template x-for="([pk,pv]) in pageDetail.properties" :key="pk">
-                  <div class="text-xs">
-                    <span class="text-teal-400/80 font-mono" x-text="pk"></span><span class="text-slate-600">::</span>
-                    <span class="text-slate-300 ml-1" x-text="Array.isArray(pv)?pv.join(', '):String(pv)"></span>
-                  </div>
-                </template>
+              <div class="rounded-lg bg-slate-900/80 border border-slate-800/60 px-4 py-3">
+                <div class="grid gap-1">
+                  <template x-for="([pk,pv]) in pageDetail.properties" :key="pk">
+                    <div class="flex items-baseline gap-2 text-xs">
+                      <span class="text-teal-400/90 font-mono font-medium min-w-[80px]" x-text="pk"></span>
+                      <span class="text-slate-600">→</span>
+                      <span class="text-slate-300" x-text="Array.isArray(pv)?pv.join(', '):String(pv)"></span>
+                    </div>
+                  </template>
+                </div>
               </div>
             </template>
 
             <!-- Outline blocks -->
-            <div class="max-h-[500px] overflow-auto outline-tree">
+            <div class="max-h-[600px] overflow-auto outline-tree pr-1"
+              style="scrollbar-width:thin;scrollbar-color:#334155 transparent">
               <template x-for="(b,i) in pageBlocks" :key="b.uuid||i">
-                <div class="group flex items-start gap-0" :style="'padding-left:'+(b.level||0)*20+'px'">
-                  <!-- Bullet -->
-                  <div class="shrink-0 mt-[7px] mr-1.5 flex items-center">
-                    <template x-if="b.marker==='TODO'">
-                      <span class="w-3.5 h-3.5 rounded border border-amber-500/60 inline-block"></span>
-                    </template>
-                    <template x-if="b.marker==='DOING'">
-                      <span class="w-3.5 h-3.5 rounded border-2 border-blue-400/70 inline-block"></span>
-                    </template>
-                    <template x-if="b.marker==='DONE'">
-                      <span
-                        class="w-3.5 h-3.5 rounded bg-emerald-600/50 border border-emerald-500/60 inline-flex items-center justify-center text-[9px] text-emerald-200">✓</span>
-                    </template>
-                    <template
-                      x-if="b.marker==='LATER'||b.marker==='WAIT'||b.marker==='WAITING'||b.marker==='CANCELLED'">
-                      <span
-                        class="w-3.5 h-3.5 rounded border border-slate-500/60 inline-flex items-center justify-center text-[8px] text-slate-400"
-                        x-text="b.marker[0]"></span>
-                    </template>
-                    <template x-if="!b.marker||b.marker===''||b.marker==='NOW'">
-                      <span class="w-1.5 h-1.5 rounded-full bg-slate-500/70 inline-block"></span>
-                    </template>
-                  </div>
-                  <!-- Content -->
-                  <div class="flex-1 min-w-0 py-[3px]">
-                    <div class="text-sm leading-relaxed text-slate-200 break-words"
-                      :class="{'line-through text-slate-500': b.marker==='DONE'||b.marker==='CANCELLED'}"
-                      x-html="renderMd(b.content)||'<span class=\'text-slate-600 italic\'>(空块)</span>'"></div>
-                    <!-- Priority badge -->
-                    <template x-if="b.priority">
-                      <span class="inline-block text-[10px] px-1 py-0 rounded mt-0.5"
-                        :class="b.priority==='A'?'bg-rose-900/70 text-rose-300':b.priority==='B'?'bg-amber-900/70 text-amber-300':'bg-slate-700 text-slate-300'"
-                        x-text="'Priority '+b.priority"></span>
-                    </template>
-                    <!-- Hover actions -->
-                    <div class="hidden group-hover:flex items-center gap-1.5 mt-0.5">
-                      <code class="text-[10px] text-slate-500 cursor-pointer hover:text-indigo-300"
-                        @click="copyUUID(b.uuid)" :title="b.uuid" x-text="b.uuid?.slice(0,8)+'…'"></code>
-                      <button
-                        class="text-[10px] px-1 py-0 rounded bg-slate-700/80 hover:bg-slate-600 text-slate-400 hover:text-slate-200"
-                        @click="fillBlockUUID(b.uuid)">→块</button>
-                      <button
-                        class="text-[10px] px-1 py-0 rounded bg-slate-700/80 hover:bg-slate-600 text-slate-400 hover:text-slate-200"
-                        @click="block.insertTarget=b.uuid;activeTab='blocks'">+子</button>
+                <div class="outline-node" :style="'padding-left:'+(b.level||0)*22+'px'">
+                  <div
+                    class="outline-row flex items-start gap-0 rounded-md px-1 -mx-1 hover:bg-slate-800/30 transition-colors">
+                    <!-- Bullet -->
+                    <div class="outline-bullet shrink-0 mt-[9px] mr-2 flex items-center justify-center w-4">
+                      <template x-if="b.marker==='TODO'">
+                        <span
+                          class="bullet-dot w-[15px] h-[15px] rounded-[3px] border-[1.5px] border-amber-400/70 inline-block cursor-pointer hover:border-amber-300"
+                          title="TODO"></span>
+                      </template>
+                      <template x-if="b.marker==='DOING'">
+                        <span
+                          class="bullet-dot w-[15px] h-[15px] rounded-[3px] border-2 border-blue-400 bg-blue-400/10 inline-block"
+                          title="DOING"></span>
+                      </template>
+                      <template x-if="b.marker==='DONE'">
+                        <span
+                          class="bullet-dot w-[15px] h-[15px] rounded-[3px] bg-emerald-500/30 border-[1.5px] border-emerald-400/70 inline-flex items-center justify-center"
+                          title="DONE">
+                          <svg class="w-2.5 h-2.5 text-emerald-300" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor" stroke-width="3">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        </span>
+                      </template>
+                      <template x-if="b.marker==='LATER'||b.marker==='WAIT'||b.marker==='WAITING'">
+                        <span
+                          class="bullet-dot w-[15px] h-[15px] rounded-[3px] border-[1.5px] border-orange-400/50 inline-flex items-center justify-center text-[8px] text-orange-300/70 font-bold"
+                          :title="b.marker" x-text="b.marker[0]"></span>
+                      </template>
+                      <template x-if="b.marker==='CANCELLED'">
+                        <span
+                          class="bullet-dot w-[15px] h-[15px] rounded-[3px] border-[1.5px] border-slate-600 bg-slate-800 inline-flex items-center justify-center text-[9px] text-slate-500"
+                          title="CANCELLED">✕</span>
+                      </template>
+                      <template x-if="!b.marker||b.marker===''||b.marker==='NOW'">
+                        <span class="bullet-dot w-[5px] h-[5px] rounded-full bg-slate-400/60 inline-block"></span>
+                      </template>
+                    </div>
+                    <!-- Content -->
+                    <div class="flex-1 min-w-0 py-1.5">
+                      <div class="md-content text-[13px] leading-[1.7] text-slate-200/90 break-words"
+                        :class="{'line-through opacity-50': b.marker==='DONE'||b.marker==='CANCELLED'}"
+                        x-html="renderMd(b.content)||'<span class=\'text-slate-600 italic text-xs\'>(空)</span>'"></div>
+                      <!-- Priority badge -->
+                      <template x-if="b.priority">
+                        <span
+                          class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md mt-1 font-medium"
+                          :class="b.priority==='A'?'bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/20':b.priority==='B'?'bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/20':'bg-slate-500/15 text-slate-400 ring-1 ring-slate-500/20'">
+                          <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path
+                              d="M3.5 2.75a.75.75 0 00-1.5 0v14.5a.75.75 0 001.5 0v-4.392l1.657-.348a6.449 6.449 0 014.271.572 7.948 7.948 0 005.965.524l2.078-.64A.75.75 0 0018 12.25v-8.5a.75.75 0 00-.904-.734l-2.38.501a7.25 7.25 0 01-4.186-.363l-.502-.2a8.75 8.75 0 00-5.053-.439l-1.475.31V2.75z" />
+                          </svg>
+                          <span x-text="b.priority"></span>
+                        </span>
+                      </template>
+                      <!-- Hover actions -->
+                      <div class="outline-actions flex items-center gap-1 mt-0.5">
+                        <code
+                          class="text-[10px] text-slate-600 cursor-pointer hover:text-indigo-400 font-mono transition-colors"
+                          @click="copyUUID(b.uuid)" :title="'复制 '+b.uuid" x-text="b.uuid?.slice(0,8)"></code>
+                        <button
+                          class="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-800/80 hover:bg-indigo-900/50 text-slate-500 hover:text-indigo-300 border border-transparent hover:border-indigo-800/50 transition-all"
+                          @click="fillBlockUUID(b.uuid)">→块</button>
+                        <button
+                          class="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-800/80 hover:bg-emerald-900/50 text-slate-500 hover:text-emerald-300 border border-transparent hover:border-emerald-800/50 transition-all"
+                          @click="block.insertTarget=b.uuid;activeTab='blocks'">+子</button>
+                      </div>
                     </div>
                   </div>
                 </div>
               </template>
             </div>
+
+            <!-- Empty state -->
+            <template x-if="pageDetail && !pageBlocks.length">
+              <div class="text-center py-8 text-slate-500 text-sm">此页面暂无内容块</div>
+            </template>
           </div>
 
           <!-- Append / Prepend -->
@@ -935,21 +1064,43 @@
         outputPageClick(name) { if (!name) return; this.currentPage = name; this.activeTab = 'pages'; this.loadPage(); },
         renderMd(text) {
           if (!text) return '';
-          let s = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-          // Block-level: heading (first line only)
-          s = s.replace(/^(#{1,6})\s+(.+)$/m, (_, h, t) => '<span class="font-bold text-slate-100" style="font-size:' + Math.max(0.75, 1.1 - h.length * 0.08) + 'rem">' + t + '</span>');
+          // Strip marker prefix (TODO, DONE etc.)
+          let s = text.replace(/^(TODO|DOING|DONE|LATER|NOW|WAIT|WAITING|CANCELLED)\s+/, '');
+          s = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          // Multi-line code blocks ```
+          s = s.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="code-block"><code>$2</code></pre>');
+          // Headings
+          s = s.replace(/^(#{1,6})\s+(.+)$/m, (_, h, t) => {
+            const sz = [1.3, 1.15, 1.05, 0.95, 0.88, 0.82][h.length - 1] || 0.82;
+            return '<span class="font-semibold text-slate-100 block" style="font-size:' + sz + 'rem;line-height:1.4">' + t + '</span>';
+          });
+          // Horizontal rule
+          s = s.replace(/^---+$/gm, '<hr/>');
+          // Block quote lines
+          s = s.replace(/^&gt;\s?(.*)$/gm, '<blockquote>$1</blockquote>');
           // Properties: key:: value
-          s = s.replace(/^([a-zA-Z_-]+)::\s*(.*)$/gm, '<span class="text-slate-500 text-xs"><span class="text-teal-400/80">$1</span><span class="text-slate-600">::</span> $2</span>');
+          s = s.replace(/^([a-zA-Z_][\w-]*)::\s*(.*)$/gm, '<span class="inline-flex items-baseline gap-1 text-[11px]"><span class="text-teal-400/80 font-mono">$1</span><span class="text-slate-700">::</span><span class="text-slate-400">$2</span></span>');
+          // Checkbox items
+          s = s.replace(/^- \[x\]\s+(.*)$/gm, '<div class="flex items-start gap-1"><input type="checkbox" checked disabled class="task-check"/><span class="line-through text-slate-500">$1</span></div>');
+          s = s.replace(/^- \[ \]\s+(.*)$/gm, '<div class="flex items-start gap-1"><input type="checkbox" disabled class="task-check"/><span>$1</span></div>');
+          // Unordered list
+          s = s.replace(/^[-*]\s+(.+)$/gm, '<li>$1</li>');
+          s = s.replace(/(<li>.*<\/li>\n?)+/g, m => '<ul>' + m + '</ul>');
+          // Inline: images before links
+          s = s.replace(/!\[([^\]]*)\]\(([^)]+?)\)/g, '<img src="$2" alt="$1" loading="lazy"/>');
           // Inline
           s = s.replace(/~~(.+?)~~/g, '<del class="text-slate-500">$1</del>');
-          s = s.replace(/\*\*(.+?)\*\*/g, '<strong class="text-slate-100">$1</strong>');
-          s = s.replace(/(?<![*\w])\*([^*]+?)\*(?![*\w])/g, '<em>$1</em>');
-          s = s.replace(/`([^`]+?)`/g, '<code class="px-1 py-0.5 rounded bg-slate-800 text-pink-300 text-[11px]">$1</code>');
-          // Logseq links
-          s = s.replace(/\[\[([^\]]+?)\]\]/g, '<span class="text-blue-400 hover:underline cursor-pointer" data-page-link="$1">$1</span>');
-          s = s.replace(/(^|\s)#([\w\u4e00-\u9fff/-]+)/g, '$1<span class="text-indigo-400/80 text-xs">#$2</span>');
-          // Markdown links [text](url)
-          s = s.replace(/\[([^\]]+?)\]\(([^)]+?)\)/g, '<a class="text-blue-400 hover:underline" href="$2" target="_blank" rel="noopener">$1</a>');
+          s = s.replace(/\*\*(.+?)\*\*/g, '<strong class="text-slate-100 font-semibold">$1</strong>');
+          s = s.replace(/(?<![*\w])\*([^*]+?)\*(?![*\w])/g, '<em class="text-slate-300">$1</em>');
+          s = s.replace(/`([^`]+?)`/g, '<code class="px-1 py-0.5 rounded bg-slate-800/80 text-pink-300/90 text-[11px] font-mono">$1</code>');
+          // Logseq wikilinks
+          s = s.replace(/\[\[([^\]]+?)\]\]/g, '<span class="text-blue-400 hover:text-blue-300 hover:underline cursor-pointer transition-colors" data-page-link="$1">$1</span>');
+          // Tags
+          s = s.replace(/(^|\s)#([\w\u4e00-\u9fff/-]+)/g, '$1<span class="inline-flex items-center px-1.5 py-0 rounded-full bg-indigo-500/10 text-indigo-400/90 text-[11px] ring-1 ring-indigo-500/20">#$2</span>');
+          // Standard markdown links
+          s = s.replace(/\[([^\]]+?)\]\(([^)]+?)\)/g, '<a class="text-blue-400 hover:text-blue-300 hover:underline transition-colors" href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+          // Newlines
+          s = s.replace(/\n/g, '<br/>');
           return s;
         },
         now() { return new Date().toLocaleTimeString('zh-CN', { hour12: false }); },
