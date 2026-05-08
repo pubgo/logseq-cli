@@ -35,13 +35,24 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/connection", s.handleConnection)
 	mux.HandleFunc("/api/graph", s.handleGraph)
+	mux.HandleFunc("/api/graph/config", s.handleGraphConfig)
 	mux.HandleFunc("/api/pages", s.handlePages)
 	mux.HandleFunc("/api/pages/filter", s.handlePagesFilter)
 	mux.HandleFunc("/api/tags", s.handleTags)
 	mux.HandleFunc("/api/page", s.handlePage)
+	mux.HandleFunc("/api/page/rename", s.handlePageRename)
+	mux.HandleFunc("/api/page/refs", s.handlePageRefs)
+	mux.HandleFunc("/api/page/namespace", s.handlePageNamespace)
+	mux.HandleFunc("/api/page/properties", s.handlePageProperties)
+	mux.HandleFunc("/api/block", s.handleBlockGet)
+	mux.HandleFunc("/api/block/insert", s.handleBlockInsert)
 	mux.HandleFunc("/api/block/append", s.handleBlockAppend)
+	mux.HandleFunc("/api/block/prepend", s.handleBlockPrepend)
 	mux.HandleFunc("/api/block/update", s.handleBlockUpdate)
 	mux.HandleFunc("/api/block/remove", s.handleBlockRemove)
+	mux.HandleFunc("/api/block/move", s.handleBlockMove)
+	mux.HandleFunc("/api/block/property", s.handleBlockProperty)
+	mux.HandleFunc("/api/block/collapse", s.handleBlockCollapse)
 	mux.HandleFunc("/api/query/datalog", s.handleQueryDatalog)
 	mux.HandleFunc("/api/query/dsl", s.handleQueryDSL)
 	mux.HandleFunc("/api/search", s.handleSearch)
@@ -101,6 +112,23 @@ func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeOK(w, info)
+}
+
+func (s *Server) handleGraphConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	config, err := s.client.GetUserConfigs(ctx)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, config)
 }
 
 func (s *Server) handlePages(w http.ResponseWriter, r *http.Request) {
@@ -847,6 +875,374 @@ func parseQueryRequest(w http.ResponseWriter, r *http.Request) (string, bool) {
 		return "", false
 	}
 	return query, true
+}
+
+// === Page: rename ===
+
+type renamePageRequest struct {
+	OldName string `json:"oldName"`
+	NewName string `json:"newName"`
+}
+
+func (s *Server) handlePageRename(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req renamePageRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	req.OldName = strings.TrimSpace(req.OldName)
+	req.NewName = strings.TrimSpace(req.NewName)
+	if req.OldName == "" || req.NewName == "" {
+		writeError(w, http.StatusBadRequest, "oldName and newName are required")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	if err := s.client.RenamePage(ctx, req.OldName, req.NewName); err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, map[string]any{"message": "renamed: " + req.OldName + " -> " + req.NewName})
+}
+
+// === Page: refs (backlinks) ===
+
+func (s *Server) handlePageRefs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	name := strings.TrimSpace(r.URL.Query().Get("name"))
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "missing query: name")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	result, err := s.client.GetPageLinkedReferences(ctx, name)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeRawJSONOrFallback(w, result)
+}
+
+// === Page: namespace ===
+
+func (s *Server) handlePageNamespace(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	ns := strings.TrimSpace(r.URL.Query().Get("name"))
+	if ns == "" {
+		writeError(w, http.StatusBadRequest, "missing query: name")
+		return
+	}
+	tree := strings.TrimSpace(r.URL.Query().Get("tree")) == "true"
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	if tree {
+		result, err := s.client.GetPagesTreeFromNamespace(ctx, ns)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		writeRawJSONOrFallback(w, result)
+		return
+	}
+
+	pages, err := s.client.GetPagesFromNamespace(ctx, ns)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, pages)
+}
+
+// === Page: properties ===
+
+type setPagePropertiesRequest struct {
+	Name       string         `json:"name"`
+	Properties map[string]any `json:"properties"`
+}
+
+func (s *Server) handlePageProperties(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		name := strings.TrimSpace(r.URL.Query().Get("name"))
+		if name == "" {
+			writeError(w, http.StatusBadRequest, "missing query: name")
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		defer cancel()
+		page, err := s.client.GetPage(ctx, name)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		if page == nil {
+			writeError(w, http.StatusNotFound, "page not found: "+name)
+			return
+		}
+		props := page.Properties
+		if props == nil {
+			props = map[string]any{}
+		}
+		writeOK(w, props)
+	case http.MethodPost:
+		var req setPagePropertiesRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid json body")
+			return
+		}
+		req.Name = strings.TrimSpace(req.Name)
+		if req.Name == "" || len(req.Properties) == 0 {
+			writeError(w, http.StatusBadRequest, "name and properties are required")
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		defer cancel()
+		if err := s.client.SetPageProperties(ctx, req.Name, req.Properties); err != nil {
+			writeError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		writeOK(w, map[string]any{"message": "properties updated"})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+// === Block: get ===
+
+func (s *Server) handleBlockGet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	uuid := strings.TrimSpace(r.URL.Query().Get("uuid"))
+	if uuid == "" {
+		writeError(w, http.StatusBadRequest, "missing query: uuid")
+		return
+	}
+	children := strings.TrimSpace(r.URL.Query().Get("children")) == "true"
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	block, err := s.client.GetBlock(ctx, uuid, children)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if block == nil {
+		writeError(w, http.StatusNotFound, "block not found: "+uuid)
+		return
+	}
+	writeOK(w, block)
+}
+
+// === Block: insert ===
+
+type insertBlockRequest struct {
+	TargetUUID string `json:"targetUUID"`
+	Content    string `json:"content"`
+	Sibling    bool   `json:"sibling"`
+}
+
+func (s *Server) handleBlockInsert(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req insertBlockRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	req.TargetUUID = strings.TrimSpace(req.TargetUUID)
+	req.Content = strings.TrimSpace(req.Content)
+	if req.TargetUUID == "" || req.Content == "" {
+		writeError(w, http.StatusBadRequest, "targetUUID and content are required")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	block, err := s.client.InsertBlock(ctx, req.TargetUUID, req.Content, &logseq.InsertBlockOptions{Sibling: req.Sibling})
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, block)
+}
+
+// === Block: prepend ===
+
+type prependBlockRequest struct {
+	Page    string `json:"page"`
+	Content string `json:"content"`
+}
+
+func (s *Server) handleBlockPrepend(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req prependBlockRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	req.Page = strings.TrimSpace(req.Page)
+	req.Content = strings.TrimSpace(req.Content)
+	if req.Page == "" || req.Content == "" {
+		writeError(w, http.StatusBadRequest, "page and content are required")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	block, err := s.client.PrependBlockInPage(ctx, req.Page, req.Content)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, block)
+}
+
+// === Block: move ===
+
+type moveBlockRequest struct {
+	SrcUUID    string `json:"srcUUID"`
+	TargetUUID string `json:"targetUUID"`
+	Before     bool   `json:"before"`
+}
+
+func (s *Server) handleBlockMove(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req moveBlockRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	req.SrcUUID = strings.TrimSpace(req.SrcUUID)
+	req.TargetUUID = strings.TrimSpace(req.TargetUUID)
+	if req.SrcUUID == "" || req.TargetUUID == "" {
+		writeError(w, http.StatusBadRequest, "srcUUID and targetUUID are required")
+		return
+	}
+	var opts map[string]any
+	if req.Before {
+		opts = map[string]any{"before": true}
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	if err := s.client.MoveBlock(ctx, req.SrcUUID, req.TargetUUID, opts); err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, map[string]any{"message": "moved block: " + req.SrcUUID + " -> " + req.TargetUUID})
+}
+
+// === Block: property (get/set/remove) ===
+
+type blockPropertyRequest struct {
+	UUID   string `json:"uuid"`
+	Key    string `json:"key"`
+	Value  any    `json:"value"`
+	Action string `json:"action"` // "get", "set", "remove"
+}
+
+func (s *Server) handleBlockProperty(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		uuid := strings.TrimSpace(r.URL.Query().Get("uuid"))
+		if uuid == "" {
+			writeError(w, http.StatusBadRequest, "missing query: uuid")
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		defer cancel()
+		props, err := s.client.GetBlockProperties(ctx, uuid)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		writeOK(w, props)
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req blockPropertyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	req.UUID = strings.TrimSpace(req.UUID)
+	req.Key = strings.TrimSpace(req.Key)
+	if req.UUID == "" || req.Key == "" {
+		writeError(w, http.StatusBadRequest, "uuid and key are required")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	switch req.Action {
+	case "remove":
+		if err := s.client.RemoveBlockProperty(ctx, req.UUID, req.Key); err != nil {
+			writeError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		writeOK(w, map[string]any{"message": "removed property: " + req.Key})
+	default: // "set" or empty
+		if err := s.client.UpsertBlockProperty(ctx, req.UUID, req.Key, req.Value); err != nil {
+			writeError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		writeOK(w, map[string]any{"message": "set property: " + req.Key})
+	}
+}
+
+// === Block: collapse/expand ===
+
+type blockCollapseRequest struct {
+	UUID      string `json:"uuid"`
+	Collapsed bool   `json:"collapsed"`
+}
+
+func (s *Server) handleBlockCollapse(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req blockCollapseRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	req.UUID = strings.TrimSpace(req.UUID)
+	if req.UUID == "" {
+		writeError(w, http.StatusBadRequest, "uuid is required")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	if err := s.client.SetBlockCollapsed(ctx, req.UUID, req.Collapsed); err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	action := "collapsed"
+	if !req.Collapsed {
+		action = "expanded"
+	}
+	writeOK(w, map[string]any{"message": action + " block: " + req.UUID})
 }
 
 func writeRawJSONOrFallback(w http.ResponseWriter, raw json.RawMessage) {

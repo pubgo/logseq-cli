@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/pubgo/logseq-cli/pkg/logseq"
 	"github.com/pubgo/redant"
@@ -19,6 +20,9 @@ func PageCmd() *redant.Command {
 			pageCreateCmd(),
 			pageDeleteCmd(),
 			pageRenameCmd(),
+			pageRefsCmd(),
+			pageNamespaceCmd(),
+			pagePropertiesCmd(),
 		},
 	}
 }
@@ -78,17 +82,39 @@ func pageGetCmd() *redant.Command {
 }
 
 func pageCreateCmd() *redant.Command {
+	var content string
 	return &redant.Command{
 		Use:   "create <name>",
 		Short: "Create a page",
 		Args: redant.ArgSet{
 			{Name: "name", Required: true, Value: redant.StringOf(new(string)), Description: "Page name"},
 		},
+		Options: redant.OptionSet{
+			{
+				Flag:        "content",
+				Shorthand:   "c",
+				Description: "Initial block content (use '-' to read from stdin)",
+				Value:       redant.StringOf(&content),
+			},
+		},
 		ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) (*logseq.Page, error) {
 			client := NewClient()
-			return client.CreatePage(ctx, inv.Args[0], nil, &logseq.CreatePageOptions{
+			page, err := client.CreatePage(ctx, inv.Args[0], nil, &logseq.CreatePageOptions{
 				CreateFirstBlock: true,
 			})
+			if err != nil {
+				return nil, err
+			}
+			if content != "" {
+				body, err := readContent(inv, content)
+				if err != nil {
+					return nil, err
+				}
+				if _, err := client.AppendBlockInPage(ctx, inv.Args[0], body); err != nil {
+					return nil, err
+				}
+			}
+			return page, nil
 		}),
 	}
 }
@@ -125,5 +151,110 @@ func pageRenameCmd() *redant.Command {
 			}
 			return StatusResult{OK: true, Message: "renamed: " + inv.Args[0] + " -> " + inv.Args[1]}, nil
 		}),
+	}
+}
+
+func pageRefsCmd() *redant.Command {
+	return &redant.Command{
+		Use:   "refs <name>",
+		Short: "Get backlinks (linked references) for a page",
+		Args: redant.ArgSet{
+			{Name: "name", Required: true, Value: redant.StringOf(new(string)), Description: "Page name"},
+		},
+		Handler: func(ctx context.Context, inv *redant.Invocation) error {
+			client := NewClient()
+			result, err := client.GetPageLinkedReferences(ctx, inv.Args[0])
+			if err != nil {
+				return err
+			}
+			enc := json.NewEncoder(inv.Stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(json.RawMessage(result))
+		},
+	}
+}
+
+func pageNamespaceCmd() *redant.Command {
+	var tree bool
+	return &redant.Command{
+		Use:   "namespace <name>",
+		Short: "List pages in a namespace",
+		Args: redant.ArgSet{
+			{Name: "name", Required: true, Value: redant.StringOf(new(string)), Description: "Namespace prefix"},
+		},
+		Options: redant.OptionSet{
+			{
+				Flag:        "tree",
+				Description: "Return as tree structure",
+				Value:       redant.BoolOf(&tree),
+			},
+		},
+		Handler: func(ctx context.Context, inv *redant.Invocation) error {
+			client := NewClient()
+			enc := json.NewEncoder(inv.Stdout)
+			enc.SetIndent("", "  ")
+
+			if tree {
+				result, err := client.GetPagesTreeFromNamespace(ctx, inv.Args[0])
+				if err != nil {
+					return err
+				}
+				return enc.Encode(json.RawMessage(result))
+			}
+
+			pages, err := client.GetPagesFromNamespace(ctx, inv.Args[0])
+			if err != nil {
+				return err
+			}
+			return enc.Encode(pages)
+		},
+	}
+}
+
+func pagePropertiesCmd() *redant.Command {
+	return &redant.Command{
+		Use:   "properties <name> [key=value ...]",
+		Short: "Get or set page properties",
+		Long:  "Without key=value args, prints current properties. With args, sets them.",
+		Args: redant.ArgSet{
+			{Name: "name", Required: true, Value: redant.StringOf(new(string)), Description: "Page name"},
+		},
+		Handler: func(ctx context.Context, inv *redant.Invocation) error {
+			client := NewClient()
+			name := inv.Args[0]
+
+			// If extra args provided, treat as key=value pairs to set
+			if len(inv.Args) > 1 {
+				props := make(map[string]any)
+				for _, kv := range inv.Args[1:] {
+					parts := strings.SplitN(kv, "=", 2)
+					if len(parts) != 2 {
+						return fmt.Errorf("invalid property format %q, expected key=value", kv)
+					}
+					props[parts[0]] = parts[1]
+				}
+				if err := client.SetPageProperties(ctx, name, props); err != nil {
+					return err
+				}
+				enc := json.NewEncoder(inv.Stdout)
+				enc.SetIndent("", "  ")
+				return enc.Encode(StatusResult{OK: true, Message: "properties updated"})
+			}
+
+			// No extra args: get page and print properties
+			page, err := client.GetPage(ctx, name)
+			if err != nil {
+				return err
+			}
+			if page == nil {
+				return fmt.Errorf("page '%s' not found", name)
+			}
+			enc := json.NewEncoder(inv.Stdout)
+			enc.SetIndent("", "  ")
+			if page.Properties == nil {
+				return enc.Encode(map[string]any{})
+			}
+			return enc.Encode(page.Properties)
+		},
 	}
 }

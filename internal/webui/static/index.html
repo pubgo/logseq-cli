@@ -2,947 +2,785 @@
 <html lang="zh-CN">
 
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>logseq-cli 简易 Web 验证台</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>logseq-cli WebUI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
 
 <body class="bg-slate-950 text-slate-100 min-h-screen">
-    <div class="max-w-7xl mx-auto p-4 md:p-6 space-y-4">
-        <header class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                    <h1 class="text-lg md:text-xl font-semibold">logseq-cli 简易 Web 验证台</h1>
-                    <p class="text-sm text-slate-400 mt-1">用于快速操作 Logseq 数据：页面、块、搜索、查询。内置最近操作回放，适合手工联调与回归验证。</p>
-                </div>
-                <div class="flex gap-2">
-                    <button id="btnExpandAll"
-                        class="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-sm">全部展开</button>
-                    <button id="btnCollapseAll"
-                        class="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-sm">全部收起</button>
-                </div>
+
+  <div class="max-w-7xl mx-auto p-4 md:p-6 space-y-4" x-data="logseqApp()" x-init="init()">
+
+    <!-- Header -->
+    <header class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 class="text-lg md:text-xl font-semibold">logseq-cli WebUI</h1>
+          <p class="text-sm text-slate-400 mt-1">页面 · 块 · 搜索 · 查询 · 系统</p>
+        </div>
+        <template x-if="conn">
+          <pre class="text-xs text-slate-500 bg-slate-950 rounded px-2 py-1 border border-slate-800"
+            x-text="conn.baseURL + ' · token:' + (conn.tokenConfigured ? '✓' : '✗')"></pre>
+        </template>
+      </div>
+    </header>
+
+    <!-- Tab Nav -->
+    <nav class="flex flex-wrap gap-1 border-b border-slate-700">
+      <template x-for="t in tabs" :key="t.key">
+        <button class="px-4 py-2 text-sm rounded-t-lg border border-b-0 transition-colors cursor-pointer"
+          :class="activeTab===t.key ? 'bg-slate-800 text-white border-slate-600' : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'"
+          @click="activeTab=t.key" x-text="t.label"></button>
+      </template>
+    </nav>
+
+    <!-- ==================== TAB: 页面 ==================== -->
+    <div x-show="activeTab==='pages'" x-transition class="space-y-4">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        <!-- Sidebar: page list -->
+        <div class="lg:col-span-1 rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-sm">页面列表</span>
+            <button class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs"
+              @click="refreshPages()">刷新</button>
+          </div>
+          <input x-model="filter.name" @keydown.enter="refreshPages()"
+            class="w-full px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-sm" placeholder="搜索页面名..." />
+          <div class="flex gap-2">
+            <select x-model="filter.tag"
+              class="flex-1 px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-xs">
+              <option value="">全部标签</option>
+              <template x-for="t in tagList" :key="t">
+                <option :value="t" x-text="t"></option>
+              </template>
+            </select>
+            <button class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs" @click="loadTags()">刷新</button>
+          </div>
+          <details class="text-xs">
+            <summary class="cursor-pointer text-slate-400">高级过滤</summary>
+            <div class="mt-2 space-y-2">
+              <input x-model="filter.property" class="w-full px-2 py-1.5 rounded bg-slate-950 border border-slate-700"
+                placeholder="属性键" />
+              <input x-model="filter.value" class="w-full px-2 py-1.5 rounded bg-slate-950 border border-slate-700"
+                placeholder="属性值（可选）" />
+              <div class="flex items-center gap-2">
+                <select x-model="filter.mode" class="px-2 py-1.5 rounded bg-slate-950 border border-slate-700">
+                  <option value="contains">包含</option>
+                  <option value="equals">等于</option>
+                </select>
+                <label class="inline-flex items-center gap-1"><input type="checkbox"
+                    x-model="filter.includeJournal" />Journal</label>
+              </div>
             </div>
-        </header>
-
-        <details data-collapsible="true" open class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-            <summary class="font-semibold cursor-pointer select-none">系统与连接</summary>
-            <p class="text-xs text-slate-400 mt-2">用于检查服务状态、Graph 信息和当前生效的连接配置。</p>
-            <div class="mt-3 flex flex-wrap gap-2">
-                <button id="btnHealth" class="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-sm">健康检查</button>
-                <button id="btnGraph" class="px-3 py-1.5 rounded bg-blue-700 hover:bg-blue-600 text-sm">获取 Graph
-                    信息</button>
-                <button id="btnConnection"
-                    class="px-3 py-1.5 rounded bg-teal-700 hover:bg-teal-600 text-sm">连接信息</button>
-            </div>
-            <pre id="connectionInfo"
-                class="mt-3 text-xs bg-slate-950 border border-slate-800 rounded p-3 overflow-auto">(连接信息加载中...)</pre>
-        </details>
-
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <details data-collapsible="true" open
-                class="lg:col-span-1 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-                <summary class="font-semibold cursor-pointer select-none">页面列表</summary>
-                <div class="text-xs text-slate-400 mt-2">支持按标签与元数据过滤。点击页面名可查看详情（含块树）。</div>
-
-                <div class="mt-3 rounded border border-slate-800 bg-slate-950/60 p-3 space-y-2">
-                    <div class="text-xs text-slate-300">页面过滤</div>
-                    <div class="grid grid-cols-1 gap-2">
-                        <label class="text-xs text-slate-400">标签</label>
-                        <div class="flex gap-2">
-                            <select id="tagFilter"
-                                class="flex-1 px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-sm"></select>
-                            <button id="btnLoadTags"
-                                class="px-2 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-xs">刷新标签</button>
-                        </div>
-
-                        <label class="text-xs text-slate-400">页面名包含（可选）</label>
-                        <input id="pageNameFilter"
-                            class="w-full px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-sm"
-                            placeholder="例如：项目" />
-
-                        <label class="text-xs text-slate-400">元数据键（property）</label>
-                        <input id="metaKeyFilter"
-                            class="w-full px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-sm"
-                            placeholder="例如：status" />
-
-                        <label class="text-xs text-slate-400">元数据值（可选，空则仅检查键存在）</label>
-                        <input id="metaValueFilter"
-                            class="w-full px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-sm"
-                            placeholder="例如：doing" />
-
-                        <div class="flex items-center gap-2">
-                            <select id="metaModeFilter"
-                                class="px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-sm">
-                                <option value="contains">包含 contains</option>
-                                <option value="equals">严格等于 equals</option>
-                            </select>
-                            <label class="text-xs text-slate-300 inline-flex items-center gap-1">
-                                <input id="includeJournalFilter" type="checkbox" checked />
-                                包含 Journal
-                            </label>
-                        </div>
-
-                        <div class="flex gap-2 pt-1">
-                            <button id="btnApplyPageFilter"
-                                class="px-2 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-xs">应用过滤</button>
-                            <button id="btnClearPageFilter"
-                                class="px-2 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-xs">清空过滤</button>
-                        </div>
-                        <div id="pageFilterSummary" class="text-xs text-slate-400"></div>
-                    </div>
-                </div>
-
-                <div id="pages" class="space-y-1 max-h-[360px] overflow-auto pr-1 mt-3"></div>
-            </details>
-
-            <section class="lg:col-span-2 space-y-4">
-                <details data-collapsible="true" open class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-                    <summary class="font-semibold cursor-pointer select-none">页面管理</summary>
-                    <div class="mt-3 space-y-3">
-                        <div class="flex items-center justify-between">
-                            <div class="text-xs text-slate-400">创建、加载、删除当前页面</div>
-                            <button id="btnPages"
-                                class="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-sm">刷新页面列表</button>
-                        </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <label class="text-sm space-y-1">
-                                <span class="text-slate-300">创建页面名</span>
-                                <input id="createPageName"
-                                    class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
-                                    placeholder="例如：WebUI 验证页" />
-                            </label>
-
-                            <label class="text-sm space-y-1">
-                                <span class="text-slate-300">当前页面</span>
-                                <input id="currentPageName"
-                                    class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
-                                    placeholder="点击左侧页面可自动填充" />
-                            </label>
-                        </div>
-
-                        <div class="flex flex-wrap gap-2">
-                            <button id="btnCreatePage"
-                                class="px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600 text-sm">创建页面</button>
-                            <button id="btnLoadPage"
-                                class="px-3 py-1.5 rounded bg-blue-700 hover:bg-blue-600 text-sm">加载页面详情</button>
-                            <button id="btnDeletePage"
-                                class="px-3 py-1.5 rounded bg-rose-700 hover:bg-rose-600 text-sm">删除当前页面</button>
-                        </div>
-                    </div>
-                </details>
-
-                <details data-collapsible="true" open class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-                    <summary class="font-semibold cursor-pointer select-none">块管理</summary>
-                    <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <label class="text-sm space-y-1 md:col-span-2">
-                            <span class="text-slate-300">追加块内容（append）</span>
-                            <textarea id="appendContent" rows="3"
-                                class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
-                                placeholder="例如：- [ ] 来自 webui 的测试条目"></textarea>
-                        </label>
-
-                        <button id="btnAppendBlock"
-                            class="px-3 py-1.5 rounded bg-cyan-700 hover:bg-cyan-600 text-sm w-fit">追加到当前页面</button>
-
-                        <div></div>
-
-                        <label class="text-sm space-y-1">
-                            <span class="text-slate-300">更新块 UUID</span>
-                            <input id="updateUUID" class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
-                                placeholder="粘贴块 uuid" />
-                        </label>
-
-                        <label class="text-sm space-y-1">
-                            <span class="text-slate-300">更新后内容</span>
-                            <input id="updateContent"
-                                class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
-                                placeholder="新的块内容" />
-                        </label>
-
-                        <div class="flex gap-2 md:col-span-2">
-                            <button id="btnUpdateBlock"
-                                class="px-3 py-1.5 rounded bg-amber-700 hover:bg-amber-600 text-sm">更新块</button>
-                            <button id="btnRemoveBlock"
-                                class="px-3 py-1.5 rounded bg-rose-700 hover:bg-rose-600 text-sm">删除块</button>
-                        </div>
-                    </div>
-                </details>
-
-                <details data-collapsible="true" open class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-                    <summary class="font-semibold cursor-pointer select-none">检索与查询</summary>
-                    <div class="mt-3 space-y-3">
-                        <div class="space-y-2">
-                            <label class="text-sm text-slate-300">全文搜索</label>
-                            <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
-                                <input id="searchQuery"
-                                    class="md:col-span-2 px-3 py-2 rounded bg-slate-950 border border-slate-700"
-                                    placeholder="输入关键词" />
-                                <input id="searchTag" class="px-3 py-2 rounded bg-slate-950 border border-slate-700"
-                                    placeholder="标签过滤（可选）" />
-                                <button id="btnSearch"
-                                    class="px-3 py-2 rounded bg-violet-700 hover:bg-violet-600 text-sm">搜索</button>
-                            </div>
-                        </div>
-
-                        <div class="pt-2 border-t border-slate-800 space-y-2">
-                            <label class="text-sm text-slate-300">Datalog / DSL 查询</label>
-                            <textarea id="queryText" rows="4"
-                                class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
-                                placeholder="例如：[:find ?p :where [?b :block/name ?p]]"></textarea>
-
-                            <div class="rounded border border-slate-800 bg-slate-950/60 p-3 space-y-2">
-                                <div class="text-xs text-slate-300">Datalog 示例（语法较难时可直接套用）</div>
-                                <div class="flex flex-wrap gap-2">
-                                    <select id="datalogExample"
-                                        class="flex-1 min-w-[240px] px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm"></select>
-                                    <button id="btnUseDatalogExample"
-                                        class="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600 text-sm">填充示例</button>
-                                    <button id="btnRunDatalogExample"
-                                        class="px-3 py-2 rounded bg-emerald-700 hover:bg-emerald-600 text-sm">填充并执行</button>
-                                </div>
-                                <div id="datalogExampleDesc" class="text-xs text-slate-400"></div>
-                            </div>
-
-                            <div class="flex gap-2">
-                                <button id="btnQueryDatalog"
-                                    class="px-3 py-2 rounded bg-teal-700 hover:bg-teal-600 text-sm">执行 Datalog</button>
-                                <button id="btnQueryDSL"
-                                    class="px-3 py-2 rounded bg-sky-700 hover:bg-sky-600 text-sm">执行 DSL</button>
-                            </div>
-                        </div>
-                    </div>
-                </details>
-            </section>
+          </details>
+          <div class="flex gap-2">
+            <button class="px-2 py-1 rounded bg-indigo-700 hover:bg-indigo-600 text-xs"
+              @click="refreshPages()">过滤</button>
+            <button class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs"
+              @click="clearFilter();refreshPages()">清空</button>
+          </div>
+          <div class="text-xs text-slate-400" x-text="pageSummary"></div>
+          <div class="space-y-0.5 max-h-[500px] overflow-auto pr-1">
+            <template x-for="p in pageList" :key="p.uuid||p.name">
+              <button class="w-full text-left px-2 py-1 rounded hover:bg-slate-800 text-sm truncate"
+                :title="p.originalName||p.name" @click="currentPage=p.originalName||p.name;loadPage()"
+                x-text="p.originalName||p.name||'(unnamed)'"></button>
+            </template>
+          </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <details data-collapsible="true" open
-                class="lg:col-span-2 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-                <summary class="font-semibold cursor-pointer select-none">结果输出</summary>
-                <pre id="output"
-                    class="mt-3 text-xs bg-slate-950 border border-slate-800 rounded p-3 overflow-auto max-h-[500px]">(暂无)</pre>
-            </details>
+        <!-- Page detail -->
+        <div class="lg:col-span-2 space-y-4">
 
-            <details data-collapsible="true" open
-                class="lg:col-span-1 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-                <summary class="font-semibold cursor-pointer select-none">最近操作（可回放）</summary>
-                <div class="mt-3 flex items-center justify-end">
-                    <button id="btnClearHistory"
-                        class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600">清空</button>
-                </div>
-                <div id="history" class="mt-3 space-y-2 max-h-[500px] overflow-auto"></div>
-            </details>
+          <!-- CRUD -->
+          <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+            <span class="font-semibold text-sm">页面操作</span>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+              <div class="space-y-1">
+                <label class="text-slate-400 text-xs">当前页面</label>
+                <input x-model="currentPage" @keydown.enter="loadPage()"
+                  class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700" />
+              </div>
+              <div class="space-y-1">
+                <label class="text-slate-400 text-xs">新建页面名</label>
+                <input x-model="newPageName" class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700" />
+              </div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button class="px-3 py-1.5 rounded bg-blue-700 hover:bg-blue-600 text-sm"
+                @click="loadPage()">加载详情</button>
+              <button class="px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600 text-sm"
+                @click="createPage()">创建页面</button>
+              <button class="px-3 py-1.5 rounded bg-rose-700 hover:bg-rose-600 text-sm"
+                @click="deletePage()">删除页面</button>
+            </div>
+
+            <!-- Rename -->
+            <div class="border-t border-slate-800 pt-3 space-y-2">
+              <span class="text-xs text-slate-400">重命名</span>
+              <div class="flex gap-2 text-sm">
+                <input x-model="renameNewName" class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                  placeholder="新页面名" />
+                <button class="px-3 py-1.5 rounded bg-amber-700 hover:bg-amber-600 text-sm"
+                  @click="renamePage()">重命名</button>
+              </div>
+            </div>
+
+            <!-- Refs / Props -->
+            <div class="border-t border-slate-800 pt-3 flex flex-wrap gap-2">
+              <button class="px-3 py-1.5 rounded bg-violet-700 hover:bg-violet-600 text-sm"
+                @click="pageRefs()">反向引用</button>
+              <button class="px-3 py-1.5 rounded bg-teal-700 hover:bg-teal-600 text-sm" @click="pageProps()">属性</button>
+            </div>
+
+            <!-- Namespace -->
+            <div class="border-t border-slate-800 pt-3 space-y-2">
+              <span class="text-xs text-slate-400">命名空间</span>
+              <div class="flex gap-2 text-sm">
+                <input x-model="nsInput" class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                  placeholder="命名空间前缀" />
+                <button class="px-3 py-1.5 rounded bg-sky-700 hover:bg-sky-600 text-sm"
+                  @click="pageNamespace(false)">列出</button>
+                <button class="px-3 py-1.5 rounded bg-sky-700 hover:bg-sky-600 text-sm"
+                  @click="pageNamespace(true)">树形</button>
+              </div>
+            </div>
+
+            <!-- Page props set -->
+            <div class="border-t border-slate-800 pt-3 space-y-2">
+              <span class="text-xs text-slate-400">设置页面属性（key=value 每行一个）</span>
+              <textarea x-model="pagePropsText" rows="2"
+                class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm"
+                placeholder="status=done&#10;priority=high"></textarea>
+              <button class="px-3 py-1.5 rounded bg-teal-700 hover:bg-teal-600 text-sm"
+                @click="setPageProps()">设置属性</button>
+            </div>
+          </div>
+
+          <!-- Append / Prepend -->
+          <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+            <span class="font-semibold text-sm">追加内容到页面</span>
+            <textarea x-model="appendText" rows="3"
+              class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm"
+              placeholder="块内容（Markdown）"></textarea>
+            <div class="flex gap-2">
+              <button class="px-3 py-1.5 rounded bg-cyan-700 hover:bg-cyan-600 text-sm"
+                @click="appendBlock()">追加到页尾</button>
+              <button class="px-3 py-1.5 rounded bg-cyan-700 hover:bg-cyan-600 text-sm"
+                @click="prependBlock()">插入到页首</button>
+            </div>
+          </div>
+
         </div>
+      </div>
     </div>
 
-    <script>
-        // ===== 基础工具 =====
-        const $ = (id) => document.getElementById(id);
-
-        const output = $("output");
-        const pagesBox = $("pages");
-        const historyBox = $("history");
-        const connectionInfoBox = $("connectionInfo");
-        const tagFilterSelect = $("tagFilter");
-        const pageNameFilterInput = $("pageNameFilter");
-        const metaKeyFilterInput = $("metaKeyFilter");
-        const metaValueFilterInput = $("metaValueFilter");
-        const metaModeFilterSelect = $("metaModeFilter");
-        const includeJournalFilterInput = $("includeJournalFilter");
-        const pageFilterSummary = $("pageFilterSummary");
-        const datalogExampleSelect = $("datalogExample");
-        const datalogExampleDesc = $("datalogExampleDesc");
-        const actionHistory = [];
-        const maxHistory = 20;
-
-        const datalogExamples = [
-            {
-                key: "page-name-all",
-                title: "列出所有页面名",
-                desc: "适合验证查询链路是否正常。",
-                query: "[:find ?name :where [?p :block/name ?name]]",
-            },
-            {
-                key: "todo-blocks",
-                title: "查询 TODO 块",
-                desc: "查找标记为 TODO 的任务块。",
-                query: "[:find ?content :where [?b :block/marker \"TODO\"] [?b :block/content ?content]]",
-            },
-            {
-                key: "priority-a",
-                title: "查询 A 优先级任务",
-                desc: "筛选高优先级任务（A）。",
-                query: "[:find ?content :where [?b :block/priority \"A\"] [?b :block/content ?content]]",
-            },
-            {
-                key: "blocks-with-tag",
-                title: "查询带标签的块",
-                desc: "查看带 :block/tags 关联的块内容。",
-                query: "[:find ?content :where [?b :block/tags ?t] [?b :block/content ?content]]",
-            },
-            {
-                key: "recent-updated",
-                title: "最近更新的块（前20）",
-                desc: "按更新时间倒序看最近活跃内容。",
-                query: "[:find ?content ?updated :where [?b :block/content ?content] [?b :block/updated-at ?updated] :order-by [(desc ?updated)] :limit 20]",
-            },
-        ];
-
-        function getCollapsiblePanels() {
-            return Array.from(document.querySelectorAll('details[data-collapsible="true"]'));
-        }
-
-        function setAllPanels(expanded) {
-            getCollapsiblePanels().forEach((panel) => {
-                panel.open = expanded;
-            });
-        }
-
-        function readPageFilterState() {
-            return {
-                tag: String(tagFilterSelect?.value || "").trim(),
-                name: String(pageNameFilterInput?.value || "").trim(),
-                property: String(metaKeyFilterInput?.value || "").trim(),
-                value: String(metaValueFilterInput?.value || "").trim(),
-                mode: String(metaModeFilterSelect?.value || "contains"),
-                includeJournal: !!includeJournalFilterInput?.checked,
-            };
-        }
-
-        function hasActivePageFilter(filter) {
-            return !!(filter.tag || filter.name || filter.property || !filter.includeJournal);
-        }
-
-        function buildPageFilterURL(filter) {
-            const params = new URLSearchParams();
-            if (filter.tag) params.set("tag", filter.tag);
-            if (filter.name) params.set("name", filter.name);
-            if (filter.property) params.set("property", filter.property);
-            if (filter.value) params.set("value", filter.value);
-            if (filter.mode) params.set("mode", filter.mode);
-            params.set("includeJournal", String(filter.includeJournal));
-            return "/api/pages/filter?" + params.toString();
-        }
-
-        function renderPageFilterSummary(useFilter, stats, filter) {
-            if (!pageFilterSummary) return;
-
-            if (!useFilter) {
-                pageFilterSummary.textContent = `当前显示全部页面：${stats.filteredTotal}`;
-                return;
-            }
-
-            const chips = [];
-            if (filter.tag) chips.push(`tag=${filter.tag}`);
-            if (filter.name) chips.push(`name~${filter.name}`);
-            if (filter.property) {
-                const op = filter.mode === "equals" ? "=" : "~";
-                chips.push(filter.value ? `${filter.property}${op}${filter.value}` : `${filter.property}(exists)`);
-            }
-            if (!filter.includeJournal) chips.push("exclude journal");
-
-            pageFilterSummary.textContent = `已过滤：${stats.filteredTotal}/${stats.total}` + (chips.length ? `（${chips.join("; ")}）` : "");
-        }
-
-        function clearPageFilterInputs() {
-            if (tagFilterSelect) tagFilterSelect.value = "";
-            if (pageNameFilterInput) pageNameFilterInput.value = "";
-            if (metaKeyFilterInput) metaKeyFilterInput.value = "";
-            if (metaValueFilterInput) metaValueFilterInput.value = "";
-            if (metaModeFilterSelect) metaModeFilterSelect.value = "contains";
-            if (includeJournalFilterInput) includeJournalFilterInput.checked = true;
-        }
-
-        async function loadTags(needRecord = true) {
-            const request = { method: "GET", url: "/api/tags" };
-            try {
-                const tags = await api(request.url);
-                const current = String(tagFilterSelect?.value || "");
-                if (tagFilterSelect) {
-                    tagFilterSelect.innerHTML = "";
-                    const all = document.createElement("option");
-                    all.value = "";
-                    all.textContent = "全部标签";
-                    tagFilterSelect.appendChild(all);
-
-                    (tags || []).forEach((tag) => {
-                        const opt = document.createElement("option");
-                        opt.value = String(tag);
-                        opt.textContent = String(tag);
-                        tagFilterSelect.appendChild(opt);
-                    });
-
-                    tagFilterSelect.value = current;
-                }
-                if (needRecord) {
-                    addHistory("刷新标签列表", request, true, { count: (tags || []).length });
-                }
-            } catch (e) {
-                if (needRecord) {
-                    addHistory("刷新标签列表", request, false, e.message);
-                }
-                print(`刷新标签列表失败: ${e.message}`);
-            }
-        }
-
-        function getCurrentDatalogExample() {
-            const key = String(datalogExampleSelect?.value || "");
-            return datalogExamples.find((item) => item.key === key) || datalogExamples[0] || null;
-        }
-
-        function renderDatalogExamples() {
-            if (!datalogExampleSelect) return;
-
-            datalogExampleSelect.innerHTML = "";
-            datalogExamples.forEach((item) => {
-                const opt = document.createElement("option");
-                opt.value = item.key;
-                opt.textContent = item.title;
-                datalogExampleSelect.appendChild(opt);
-            });
-
-            const current = getCurrentDatalogExample();
-            if (current) {
-                datalogExampleSelect.value = current.key;
-                datalogExampleDesc.textContent = current.desc;
-            }
-        }
-
-        function applyDatalogExample(printToOutput = false) {
-            const current = getCurrentDatalogExample();
-            if (!current) return;
-
-            $("queryText").value = current.query;
-            datalogExampleDesc.textContent = current.desc;
-
-            if (printToOutput) {
-                print({
-                    message: `已填充 Datalog 示例：${current.title}`,
-                    query: current.query,
-                    hint: current.desc,
-                });
-            }
-        }
-
-        function print(data) {
-            if (typeof data === "string") {
-                output.textContent = data;
-                return;
-            }
-            output.textContent = JSON.stringify(data, null, 2);
-        }
-
-        function renderConnectionInfo(data) {
-            if (!data || typeof data !== "object") {
-                connectionInfoBox.textContent = "(连接信息不可用)";
-                return;
-            }
-
-            const tokenState = data.tokenConfigured ? "已配置" : "未配置";
-            const lines = [
-                `baseURL       : ${data.baseURL || ""}`,
-                `host          : ${data.host || ""} (${data.hostSource || "unknown"})`,
-                `port          : ${data.port || ""} (${data.portSource || "unknown"})`,
-                `token         : ${tokenState} (${data.tokenSource || "unknown"})`,
-            ];
-            connectionInfoBox.textContent = lines.join("\n");
-        }
-
-        function nowText() {
-            return new Date().toLocaleTimeString("zh-CN", { hour12: false });
-        }
-
-        // ===== 历史回放 =====
-
-        function preview(data) {
-            if (typeof data === "string") {
-                return data.length > 120 ? data.slice(0, 120) + " ..." : data;
-            }
-            try {
-                const text = JSON.stringify(data);
-                return text.length > 120 ? text.slice(0, 120) + " ..." : text;
-            } catch (_) {
-                return String(data);
-            }
-        }
-
-        function addHistory(action, request, ok, result) {
-            actionHistory.unshift({
-                time: nowText(),
-                action,
-                request,
-                ok,
-                result,
-            });
-            if (actionHistory.length > maxHistory) {
-                actionHistory.length = maxHistory;
-            }
-            renderHistory();
-        }
-
-        function buildReplayFetchOptions(req) {
-            const opts = {};
-            const method = (req.method || "GET").toUpperCase();
-            if (method !== "GET") {
-                opts.method = method;
-                opts.body = req.body || "";
-            }
-            return opts;
-        }
-
-        async function replayHistory(index) {
-            const item = actionHistory[index];
-            if (!item) return;
-
-            const req = item.request || {};
-            const options = buildReplayFetchOptions(req);
-            try {
-                const data = await api(req.url, options);
-                print(data);
-                addHistory(item.action + "（回放）", req, true, data);
-            } catch (e) {
-                print(`回放失败: ${e.message}`);
-                addHistory(item.action + "（回放）", req, false, e.message);
-            }
-        }
-
-        function renderHistory() {
-            historyBox.innerHTML = "";
-            if (actionHistory.length === 0) {
-                const empty = document.createElement("div");
-                empty.className = "text-xs text-slate-400";
-                empty.textContent = "暂无历史";
-                historyBox.appendChild(empty);
-                return;
-            }
-
-            actionHistory.forEach((item, idx) => {
-                const card = document.createElement("div");
-                card.className = "rounded border border-slate-800 bg-slate-950/60 p-2";
-
-                const top = document.createElement("div");
-                top.className = "flex items-center justify-between gap-2";
-
-                const title = document.createElement("div");
-                title.className = "text-xs font-medium";
-                title.textContent = `${item.time} · ${item.action}`;
-
-                const status = document.createElement("span");
-                status.className = "text-[10px] px-1.5 py-0.5 rounded " + (item.ok ? "bg-emerald-800 text-emerald-200" : "bg-rose-800 text-rose-200");
-                status.textContent = item.ok ? "OK" : "ERR";
-
-                top.appendChild(title);
-                top.appendChild(status);
-
-                const req = document.createElement("div");
-                req.className = "text-[11px] text-slate-400 mt-1 font-mono";
-                req.textContent = `${(item.request.method || "GET").toUpperCase()} ${item.request.url || ""}`;
-
-                const res = document.createElement("div");
-                res.className = "text-[11px] text-slate-300 mt-1";
-                res.textContent = preview(item.result);
-
-                const replayBtn = document.createElement("button");
-                replayBtn.className = "mt-2 text-[11px] px-2 py-1 rounded bg-slate-700 hover:bg-slate-600";
-                replayBtn.textContent = "回放";
-                replayBtn.onclick = () => replayHistory(idx);
-
-                card.appendChild(top);
-                card.appendChild(req);
-                card.appendChild(res);
-                card.appendChild(replayBtn);
-                historyBox.appendChild(card);
-            });
-        }
-
-        async function api(url, options = {}) {
-            const resp = await fetch(url, {
-                headers: { "Content-Type": "application/json" },
-                ...options,
-            });
-
-            const body = await resp.json().catch(() => ({ ok: false, error: "invalid response" }));
-            if (!resp.ok || body.ok === false) {
-                const err = body.error || `request failed (${resp.status})`;
-                throw new Error(typeof err === "string" ? err : JSON.stringify(err));
-            }
-            return body.data;
-        }
-
-        // ===== 页面管理 =====
-
-        async function refreshPages(needRecord = true) {
-            const filter = readPageFilterState();
-            const useFilter = hasActivePageFilter(filter);
-            const request = {
-                method: "GET",
-                url: useFilter ? buildPageFilterURL(filter) : "/api/pages",
-            };
-            try {
-                const data = await api(request.url);
-                const pages = useFilter ? (data?.items || []) : (data || []);
-                const stats = {
-                    total: useFilter ? Number(data?.total || pages.length) : pages.length,
-                    filteredTotal: useFilter ? Number(data?.filteredTotal || pages.length) : pages.length,
-                };
-
-                pagesBox.innerHTML = "";
-                pages
-                    .sort((a, b) => (a.originalName || a.name || "").localeCompare(b.originalName || b.name || ""))
-                    .forEach((p) => {
-                        const name = p.originalName || p.name || "(unnamed)";
-                        const btn = document.createElement("button");
-                        btn.className = "w-full text-left px-2 py-1 rounded hover:bg-slate-800 text-sm";
-                        btn.textContent = name;
-                        btn.onclick = async () => {
-                            $("currentPageName").value = name;
-                            await loadPage();
-                        };
-                        pagesBox.appendChild(btn);
-                    });
-
-                renderPageFilterSummary(useFilter, stats, filter);
-
-                if (useFilter) {
-                    print({
-                        message: `pages filtered: ${stats.filteredTotal}/${stats.total}`,
-                        filter,
-                        count: pages.length,
-                    });
-                } else {
-                    print({ message: `pages loaded: ${pages.length}` });
-                }
-
-                if (needRecord) {
-                    const action = useFilter ? "按元数据过滤页面" : "刷新页面列表";
-                    addHistory(action, request, true, { count: pages.length, ...stats, filter });
-                }
-            } catch (e) {
-                print(`刷新页面失败: ${e.message}`);
-                if (needRecord) {
-                    const action = useFilter ? "按元数据过滤页面" : "刷新页面列表";
-                    addHistory(action, request, false, e.message);
-                }
-            }
-        }
-
-        async function loadPage(needRecord = true) {
-            const name = $("currentPageName").value.trim();
-            if (!name) {
-                print("请先输入页面名");
-                return;
-            }
-            const request = { method: "GET", url: `/api/page?name=${encodeURIComponent(name)}` };
-
-            try {
-                const data = await api(request.url);
-                print(data);
-                if (needRecord) addHistory("加载页面详情", request, true, data);
-            } catch (e) {
-                print(`加载页面失败: ${e.message}`);
-                if (needRecord) addHistory("加载页面详情", request, false, e.message);
-            }
-        }
-
-        async function createPage() {
-            const name = $("createPageName").value.trim();
-            if (!name) {
-                print("请先输入创建页面名");
-                return;
-            }
-
-            const request = {
-                method: "POST",
-                url: "/api/page",
-                body: JSON.stringify({ name }),
-            };
-
-            try {
-                const data = await api(request.url, { method: request.method, body: request.body });
-                $("currentPageName").value = name;
-                print(data);
-                addHistory("创建页面", request, true, data);
-                await refreshPages(false);
-            } catch (e) {
-                print(`创建页面失败: ${e.message}`);
-                addHistory("创建页面", request, false, e.message);
-            }
-        }
-
-        async function deletePage() {
-            const name = $("currentPageName").value.trim();
-            if (!name) {
-                print("请先输入当前页面名");
-                return;
-            }
-            if (!confirm(`确认删除页面: ${name} ?`)) {
-                return;
-            }
-
-            const request = {
-                method: "DELETE",
-                url: `/api/page?name=${encodeURIComponent(name)}`,
-            };
-
-            try {
-                const data = await api(request.url, { method: request.method });
-                print(data);
-                addHistory("删除页面", request, true, data);
-                await refreshPages(false);
-            } catch (e) {
-                print(`删除页面失败: ${e.message}`);
-                addHistory("删除页面", request, false, e.message);
-            }
-        }
-
-        async function appendBlock() {
-            const page = $("currentPageName").value.trim();
-            const content = $("appendContent").value.trim();
-            if (!page || !content) {
-                print("当前页面和追加内容都不能为空");
-                return;
-            }
-
-            const request = {
-                method: "POST",
-                url: "/api/block/append",
-                body: JSON.stringify({ page, content }),
-            };
-
-            try {
-                const data = await api(request.url, { method: request.method, body: request.body });
-                if (data && data.uuid) {
-                    $("updateUUID").value = data.uuid;
-                }
-                print(data);
-                addHistory("追加块", request, true, data);
-                await loadPage(false);
-            } catch (e) {
-                print(`追加块失败: ${e.message}`);
-                addHistory("追加块", request, false, e.message);
-            }
-        }
-
-        // ===== 块管理 =====
-
-        async function updateBlock() {
-            const uuid = $("updateUUID").value.trim();
-            const content = $("updateContent").value.trim();
-            if (!uuid || !content) {
-                print("更新块需要 uuid 和 content");
-                return;
-            }
-
-            const request = {
-                method: "POST",
-                url: "/api/block/update",
-                body: JSON.stringify({ uuid, content }),
-            };
-
-            try {
-                const data = await api(request.url, { method: request.method, body: request.body });
-                print(data);
-                addHistory("更新块", request, true, data);
-                await loadPage(false);
-            } catch (e) {
-                print(`更新块失败: ${e.message}`);
-                addHistory("更新块", request, false, e.message);
-            }
-        }
-
-        async function removeBlock() {
-            const uuid = $("updateUUID").value.trim();
-            if (!uuid) {
-                print("删除块需要 uuid");
-                return;
-            }
-            if (!confirm(`确认删除块: ${uuid} ?`)) {
-                return;
-            }
-
-            const request = {
-                method: "POST",
-                url: "/api/block/remove",
-                body: JSON.stringify({ uuid }),
-            };
-
-            try {
-                const data = await api(request.url, { method: request.method, body: request.body });
-                print(data);
-                addHistory("删除块", request, true, data);
-                await loadPage(false);
-            } catch (e) {
-                print(`删除块失败: ${e.message}`);
-                addHistory("删除块", request, false, e.message);
-            }
-        }
-
-        async function search() {
-            const q = $("searchQuery").value.trim();
-            const tag = ($("searchTag")?.value || "").trim();
-            if (!q) {
-                print("请输入搜索关键词");
-                return;
-            }
-
-            const params = new URLSearchParams();
-            params.set("q", q);
-            if (tag) params.set("tag", tag);
-
-            const request = { method: "GET", url: `/api/search?${params.toString()}` };
-
-            try {
-                const data = await api(request.url);
-                print(data);
-                addHistory(tag ? "按标签全文搜索" : "全文搜索", request, true, data);
-            } catch (e) {
-                print(`搜索失败: ${e.message}`);
-                addHistory(tag ? "按标签全文搜索" : "全文搜索", request, false, e.message);
-            }
-        }
-
-        // ===== 检索与查询 =====
-
-        async function runDatalogQuery() {
-            const query = $("queryText").value.trim();
-            if (!query) {
-                print("请输入 Datalog 查询语句");
-                return;
-            }
-
-            const request = {
-                method: "POST",
-                url: "/api/query/datalog",
-                body: JSON.stringify({ query }),
-            };
-
-            try {
-                const data = await api(request.url, { method: request.method, body: request.body });
-                print(data);
-                addHistory("执行 Datalog", request, true, data);
-            } catch (e) {
-                print(`Datalog 查询失败: ${e.message}`);
-                addHistory("执行 Datalog", request, false, e.message);
-            }
-        }
-
-        async function runDSLQuery() {
-            const query = $("queryText").value.trim();
-            if (!query) {
-                print("请输入 DSL 查询语句");
-                return;
-            }
-
-            const request = {
-                method: "POST",
-                url: "/api/query/dsl",
-                body: JSON.stringify({ query }),
-            };
-
-            try {
-                const data = await api(request.url, { method: request.method, body: request.body });
-                print(data);
-                addHistory("执行 DSL", request, true, data);
-            } catch (e) {
-                print(`DSL 查询失败: ${e.message}`);
-                addHistory("执行 DSL", request, false, e.message);
-            }
-        }
-
-        async function runHealth() {
-            const request = { method: "GET", url: "/api/health" };
-            try {
-                const data = await api(request.url);
-                print(data);
-                addHistory("健康检查", request, true, data);
-            } catch (e) {
-                print(`健康检查失败: ${e.message}`);
-                addHistory("健康检查", request, false, e.message);
-            }
-        }
-
-        async function runGraph() {
-            const request = { method: "GET", url: "/api/graph" };
-            try {
-                const data = await api(request.url);
-                print(data);
-                addHistory("获取 Graph 信息", request, true, data);
-            } catch (e) {
-                print(`获取 Graph 信息失败: ${e.message}`);
-                addHistory("获取 Graph 信息", request, false, e.message);
-            }
-        }
-
-        // ===== 系统与连接 =====
-        async function loadConnectionInfo(needRecord = true, needPrint = false) {
-            const request = { method: "GET", url: "/api/connection" };
-            try {
-                const data = await api(request.url);
-                renderConnectionInfo(data);
-                if (needPrint) {
-                    print(data);
-                }
-                if (needRecord) {
-                    addHistory("查看连接信息", request, true, data);
-                }
-            } catch (e) {
-                connectionInfoBox.textContent = `连接信息加载失败: ${e.message}`;
-                if (needPrint) {
-                    print(`连接信息加载失败: ${e.message}`);
-                }
-                if (needRecord) {
-                    addHistory("查看连接信息", request, false, e.message);
-                }
-            }
-        }
-
-        // ===== 事件绑定与初始化 =====
-
-        $("btnHealth").onclick = runHealth;
-        $("btnGraph").onclick = runGraph;
-        $("btnPages").onclick = refreshPages;
-        $("btnLoadTags").onclick = () => loadTags(true);
-        $("btnApplyPageFilter").onclick = () => refreshPages(true);
-        $("btnClearPageFilter").onclick = async () => {
-            clearPageFilterInputs();
-            await refreshPages(true);
-        };
-        $("btnConnection").onclick = () => loadConnectionInfo(true, true);
-        $("btnCreatePage").onclick = createPage;
-        $("btnLoadPage").onclick = loadPage;
-        $("btnDeletePage").onclick = deletePage;
-        $("btnAppendBlock").onclick = appendBlock;
-        $("btnUpdateBlock").onclick = updateBlock;
-        $("btnRemoveBlock").onclick = removeBlock;
-        $("btnSearch").onclick = search;
-        $("btnQueryDatalog").onclick = runDatalogQuery;
-        $("btnQueryDSL").onclick = runDSLQuery;
-        $("btnUseDatalogExample").onclick = () => applyDatalogExample(true);
-        $("btnRunDatalogExample").onclick = async () => {
-            applyDatalogExample(false);
-            await runDatalogQuery();
-        };
-        datalogExampleSelect.onchange = () => {
-            const current = getCurrentDatalogExample();
-            if (current) {
-                datalogExampleDesc.textContent = current.desc;
-            }
-        };
-        $("btnExpandAll").onclick = () => setAllPanels(true);
-        $("btnCollapseAll").onclick = () => setAllPanels(false);
-        $("btnClearHistory").onclick = () => {
-            actionHistory.length = 0;
-            renderHistory();
-            print("历史已清空");
-        };
-
-        renderDatalogExamples();
-        renderHistory();
-        loadConnectionInfo(false, false);
-        loadTags(false);
-        refreshPages(false);
-    </script>
+    <!-- ==================== TAB: 块 ==================== -->
+    <div x-show="activeTab==='blocks'" x-transition class="space-y-4">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        <!-- Get block -->
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <span class="font-semibold text-sm">获取块</span>
+          <div class="flex gap-2 text-sm">
+            <input x-model="block.getUUID" class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700"
+              placeholder="块 UUID" />
+            <label class="inline-flex items-center gap-1 text-xs"><input type="checkbox"
+                x-model="block.getChildren" />子块</label>
+            <button class="px-3 py-1.5 rounded bg-blue-700 hover:bg-blue-600" @click="getBlock()">获取</button>
+          </div>
+        </div>
+
+        <!-- Insert block -->
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <span class="font-semibold text-sm">插入块</span>
+          <div class="grid grid-cols-1 gap-2 text-sm">
+            <input x-model="block.insertTarget" class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
+              placeholder="目标块 UUID" />
+            <textarea x-model="block.insertContent" rows="2"
+              class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700" placeholder="块内容"></textarea>
+            <div class="flex gap-2">
+              <label class="inline-flex items-center gap-1 text-xs"><input type="checkbox"
+                  x-model="block.insertSibling" />同级</label>
+              <button class="px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600" @click="insertBlock()">插入</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Update block -->
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <span class="font-semibold text-sm">更新块</span>
+          <div class="grid grid-cols-1 gap-2 text-sm">
+            <input x-model="block.updateUUID" class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
+              placeholder="块 UUID" />
+            <textarea x-model="block.updateContent" rows="2"
+              class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700" placeholder="新内容"></textarea>
+            <div class="flex gap-2">
+              <button class="px-3 py-1.5 rounded bg-amber-700 hover:bg-amber-600" @click="updateBlock()">更新</button>
+              <button class="px-3 py-1.5 rounded bg-rose-700 hover:bg-rose-600" @click="removeBlock()">删除块</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Move block -->
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <span class="font-semibold text-sm">移动块</span>
+          <div class="grid grid-cols-1 gap-2 text-sm">
+            <input x-model="block.moveSrc" class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
+              placeholder="源块 UUID" />
+            <input x-model="block.moveTarget" class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
+              placeholder="目标块 UUID" />
+            <div class="flex gap-2">
+              <label class="inline-flex items-center gap-1 text-xs"><input type="checkbox"
+                  x-model="block.moveBefore" />移到前面</label>
+              <button class="px-3 py-1.5 rounded bg-amber-700 hover:bg-amber-600" @click="moveBlock()">移动</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Block property -->
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <span class="font-semibold text-sm">块属性</span>
+          <div class="grid grid-cols-1 gap-2 text-sm">
+            <input x-model="block.propUUID" class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
+              placeholder="块 UUID" />
+            <div class="flex gap-2">
+              <input x-model="block.propKey" class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                placeholder="属性键" />
+              <input x-model="block.propValue" class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                placeholder="属性值" />
+            </div>
+            <div class="flex gap-2">
+              <button class="px-3 py-1.5 rounded bg-blue-700 hover:bg-blue-600" @click="getBlockProps()">获取属性</button>
+              <button class="px-3 py-1.5 rounded bg-teal-700 hover:bg-teal-600" @click="setBlockProp()">设置</button>
+              <button class="px-3 py-1.5 rounded bg-rose-700 hover:bg-rose-600" @click="removeBlockProp()">删除</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Block collapse -->
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <span class="font-semibold text-sm">折叠/展开块</span>
+          <div class="flex gap-2 text-sm">
+            <input x-model="block.collapseUUID" class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700"
+              placeholder="块 UUID" />
+            <button class="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600" @click="collapseBlock(true)">折叠</button>
+            <button class="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600"
+              @click="collapseBlock(false)">展开</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ==================== TAB: 搜索 ==================== -->
+    <div x-show="activeTab==='search'" x-transition class="space-y-4">
+      <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+        <span class="font-semibold text-sm">全文搜索</span>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm">
+          <input x-model="searchQ" @keydown.enter="doSearch()"
+            class="md:col-span-2 px-3 py-2 rounded bg-slate-950 border border-slate-700" placeholder="关键词" />
+          <input x-model="searchTag" class="px-3 py-2 rounded bg-slate-950 border border-slate-700"
+            placeholder="标签过滤（可选）" />
+          <button class="px-3 py-2 rounded bg-violet-700 hover:bg-violet-600" @click="doSearch()">搜索</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== TAB: 标签 ==================== -->
+    <div x-show="activeTab==='tags'" x-transition class="space-y-4">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        <!-- Tag list -->
+        <div class="lg:col-span-1 rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-sm">标签列表</span>
+            <button class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs"
+              @click="refreshTagTab()">刷新</button>
+          </div>
+          <input x-model="tagFilter" @input="filterTagList()"
+            class="w-full px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-sm" placeholder="过滤标签名..." />
+          <div class="text-xs text-slate-400"
+            x-text="'共 '+tagListAll.length+' 个标签'+(tagFilter?' · 匹配 '+tagListFiltered.length:'')">
+          </div>
+          <div class="space-y-0.5 max-h-[500px] overflow-auto pr-1">
+            <template x-for="t in tagListFiltered" :key="t">
+              <button
+                class="w-full text-left px-2 py-1.5 rounded text-sm truncate flex items-center justify-between group"
+                :class="selectedTag===t ? 'bg-indigo-800/40 text-indigo-200' : 'hover:bg-slate-800'" :title="t"
+                @click="selectTag(t)">
+                <span x-text="t"></span>
+                <span class="text-xs text-slate-500 group-hover:text-slate-300">#</span>
+              </button>
+            </template>
+          </div>
+        </div>
+
+        <!-- Tag detail: pages with this tag -->
+        <div class="lg:col-span-2 space-y-4">
+          <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="font-semibold text-sm">
+                <template x-if="selectedTag"><span>标签: <span class="text-indigo-300" x-text="selectedTag"></span>
+                    下的页面</span></template>
+                <template x-if="!selectedTag"><span>请选择一个标签</span></template>
+              </span>
+              <template x-if="selectedTag">
+                <button class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs"
+                  @click="loadTagPages()">刷新</button>
+              </template>
+            </div>
+            <template x-if="selectedTag">
+              <div class="space-y-2">
+                <div class="text-xs text-slate-400" x-text="'共 '+tagPages.length+' 个页面'"></div>
+                <div class="space-y-1 max-h-[450px] overflow-auto">
+                  <template x-for="p in tagPages" :key="p.uuid||p.name">
+                    <div
+                      class="flex items-center justify-between rounded border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm hover:bg-slate-800/60">
+                      <span class="truncate" x-text="p.originalName||p.name||'(unnamed)'"></span>
+                      <div class="flex gap-1 shrink-0 ml-2">
+                        <button class="px-2 py-0.5 rounded bg-blue-700 hover:bg-blue-600 text-xs"
+                          @click="currentPage=p.originalName||p.name;activeTab='pages';loadPage()">查看</button>
+                        <button class="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-xs"
+                          @click="tagPageDetail(p)">详情</button>
+                      </div>
+                    </div>
+                  </template>
+                  <template x-if="selectedTag && !tagPages.length">
+                    <div class="text-xs text-slate-400 py-4 text-center">该标签下没有页面</div>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ==================== TAB: 查询 ==================== -->
+    <div x-show="activeTab==='query'" x-transition class="space-y-4">
+      <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+        <span class="font-semibold text-sm">Datalog / DSL 查询</span>
+        <textarea x-model="queryText" rows="5"
+          class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm font-mono"
+          placeholder="[:find ?p :where [?b :block/name ?p]]"></textarea>
+
+        <div class="rounded border border-slate-800 bg-slate-950/60 p-3 space-y-2">
+          <div class="text-xs text-slate-300">Datalog 示例</div>
+          <div class="flex flex-wrap gap-2">
+            <select x-model="selectedExample" @change="exampleDesc=currentExample()?.desc||''"
+              class="flex-1 min-w-[200px] px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm">
+              <template x-for="e in datalogExamples" :key="e.key">
+                <option :value="e.key" x-text="e.title"></option>
+              </template>
+            </select>
+            <button class="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600 text-sm"
+              @click="applyExample()">填充</button>
+            <button class="px-3 py-2 rounded bg-emerald-700 hover:bg-emerald-600 text-sm"
+              @click="applyExample();runDatalog()">填充并执行</button>
+          </div>
+          <div class="text-xs text-slate-400" x-text="exampleDesc"></div>
+        </div>
+
+        <div class="flex gap-2">
+          <button class="px-3 py-2 rounded bg-teal-700 hover:bg-teal-600 text-sm" @click="runDatalog()">执行
+            Datalog</button>
+          <button class="px-3 py-2 rounded bg-sky-700 hover:bg-sky-600 text-sm" @click="runDSL()">执行 DSL</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== TAB: 系统 ==================== -->
+    <div x-show="activeTab==='system'" x-transition class="space-y-4">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <span class="font-semibold text-sm">连接与状态</span>
+          <div class="flex flex-wrap gap-2">
+            <button class="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-sm"
+              @click="runHealth()">健康检查</button>
+            <button class="px-3 py-1.5 rounded bg-blue-700 hover:bg-blue-600 text-sm" @click="runGraph()">Graph
+              信息</button>
+            <button class="px-3 py-1.5 rounded bg-teal-700 hover:bg-teal-600 text-sm"
+              @click="loadConn(true,true)">连接信息</button>
+            <button class="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-sm"
+              @click="runGraphConfig()">用户配置</button>
+          </div>
+          <template x-if="conn">
+            <pre class="text-xs bg-slate-950 border border-slate-800 rounded p-3 overflow-auto"
+              x-text="'baseURL : '+conn.baseURL+'\nhost    : '+conn.host+' ('+conn.hostSource+')\nport    : '+conn.port+' ('+conn.portSource+')\ntoken   : '+(conn.tokenConfigured?'已配置':'未配置')+' ('+conn.tokenSource+')'"></pre>
+          </template>
+        </div>
+
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-sm">操作历史</span>
+            <button class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600"
+              @click="history=[];output='历史已清空'">清空</button>
+          </div>
+          <div class="space-y-2 max-h-[400px] overflow-auto">
+            <template x-if="!history.length">
+              <div class="text-xs text-slate-400">暂无</div>
+            </template>
+            <template x-for="(h,idx) in history" :key="idx">
+              <div class="rounded border border-slate-800 bg-slate-950/60 p-2 text-xs">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-medium" x-text="h.time+' · '+h.action"></span>
+                  <span class="px-1.5 py-0.5 rounded"
+                    :class="h.ok?'bg-emerald-800 text-emerald-200':'bg-rose-800 text-rose-200'"
+                    x-text="h.ok?'OK':'ERR'"></span>
+                </div>
+                <div class="text-slate-400 mt-1 font-mono" x-text="(h.req.method||'GET')+' '+h.req.url"></div>
+                <button class="mt-1 px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600"
+                  @click="replay(idx)">回放</button>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== Output ==================== -->
+    <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+      <div class="flex items-center justify-between mb-2">
+        <span class="font-semibold text-sm">输出</span>
+        <button class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600" @click="copyOutput()">复制</button>
+      </div>
+      <pre class="text-xs bg-slate-950 border border-slate-800 rounded p-3 overflow-auto max-h-[500px]"
+        x-text="output"></pre>
+    </div>
+
+  </div><!-- end x-data -->
+
+  <script>
+    function logseqApp() {
+      return {
+        activeTab: 'pages',
+        tabs: [
+          { key: 'pages', label: '页面' }, { key: 'blocks', label: '块' },
+          { key: 'search', label: '搜索' }, { key: 'tags', label: '标签' }, { key: 'query', label: '查询' }, { key: 'system', label: '系统' },
+        ],
+        conn: null,
+        output: '(暂无)',
+        history: [],
+        pageList: [],
+        tagList: [],
+        pageSummary: '',
+        currentPage: '',
+        newPageName: '',
+        renameNewName: '',
+        nsInput: '',
+        pagePropsText: '',
+        appendText: '',
+        filter: { name: '', tag: '', property: '', value: '', mode: 'contains', includeJournal: true },
+        block: {
+          getUUID: '', getChildren: false,
+          insertTarget: '', insertContent: '', insertSibling: false,
+          updateUUID: '', updateContent: '',
+          moveSrc: '', moveTarget: '', moveBefore: false,
+          propUUID: '', propKey: '', propValue: '',
+          collapseUUID: '',
+        },
+        searchQ: '', searchTag: '',
+        tagFilter: '', tagListAll: [], tagListFiltered: [], selectedTag: '', tagPages: [],
+        queryText: '',
+        selectedExample: 'page-all',
+        exampleDesc: '',
+        datalogExamples: [
+          { key: 'page-all', title: '所有页面名', desc: '验证查询链路', query: '[:find ?name :where [?p :block/name ?name]]' },
+          { key: 'todo', title: 'TODO 块', desc: '标记为 TODO 的任务', query: '[:find ?content :where [?b :block/marker "TODO"] [?b :block/content ?content]]' },
+          { key: 'priority-a', title: 'A 优先级', desc: '高优先级任务', query: '[:find ?content :where [?b :block/priority "A"] [?b :block/content ?content]]' },
+          { key: 'tagged', title: '带标签的块', desc: '有 refs 的块', query: '[:find ?content :where [?b :block/tags ?t] [?b :block/content ?content]]' },
+          { key: 'recent', title: '最近更新(前20)', desc: '按更新时间倒序', query: '[:find ?content ?updated :where [?b :block/content ?content] [?b :block/updated-at ?updated] :order-by [(desc ?updated)] :limit 20]' },
+        ],
+
+        async init() {
+          this.exampleDesc = this.datalogExamples[0]?.desc || '';
+          await Promise.all([this.loadConn(false), this.loadTags(false), this.refreshPages(false)]);
+        },
+
+        print(d) { this.output = typeof d === 'string' ? d : JSON.stringify(d, null, 2); },
+        now() { return new Date().toLocaleTimeString('zh-CN', { hour12: false }); },
+        addHistory(action, req, ok, result) {
+          this.history.unshift({ time: this.now(), action, req, ok, result });
+          if (this.history.length > 30) this.history.length = 30;
+        },
+
+        async api(url, opts = {}) {
+          const resp = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...opts });
+          const body = await resp.json().catch(() => ({ ok: false, error: 'invalid response' }));
+          if (!resp.ok || body.ok === false) {
+            const err = body.error || 'request failed (' + resp.status + ')';
+            throw new Error(typeof err === 'string' ? err : JSON.stringify(err));
+          }
+          return body.data;
+        },
+
+        async run(action, req, fn) {
+          try { const d = await fn(); this.print(d); this.addHistory(action, req, true, d); return d; }
+          catch (e) { this.print(action + '失败: ' + e.message); this.addHistory(action, req, false, e.message); return null; }
+        },
+
+        async replay(idx) {
+          const h = this.history[idx]; if (!h) return;
+          const req = h.req; const opts = {};
+          if ((req.method || 'GET') !== 'GET') { opts.method = req.method; opts.body = req.body || ''; }
+          await this.run(h.action + '（回放）', req, () => this.api(req.url, opts));
+        },
+
+        copyOutput() { navigator.clipboard.writeText(this.output).then(() => this.output = '已复制到剪贴板').catch(() => { }); },
+
+        async loadConn(record = true, toPrint = false) {
+          const req = { method: 'GET', url: '/api/connection' };
+          try {
+            const d = await this.api(req.url); this.conn = d;
+            if (toPrint) this.print(d); if (record) this.addHistory('连接信息', req, true, d);
+          } catch (e) { if (record) this.addHistory('连接信息', req, false, e.message); }
+        },
+
+        async loadTags(record = true) {
+          const req = { method: 'GET', url: '/api/tags' };
+          try {
+            const tags = await this.api(req.url); this.tagList = tags || [];
+            this.tagListAll = (tags || []).sort(); this.filterTagList();
+            if (record) this.addHistory('刷新标签', req, true, { count: this.tagList.length });
+          } catch (e) { if (record) this.addHistory('刷新标签', req, false, e.message); }
+        },
+
+        hasFilter() { const f = this.filter; return !!(f.tag || f.name || f.property || !f.includeJournal); },
+        clearFilter() { this.filter = { name: '', tag: '', property: '', value: '', mode: 'contains', includeJournal: true }; },
+        filterURL() {
+          const f = this.filter; const p = new URLSearchParams();
+          if (f.tag) p.set('tag', f.tag); if (f.name) p.set('name', f.name);
+          if (f.property) p.set('property', f.property); if (f.value) p.set('value', f.value);
+          p.set('mode', f.mode); p.set('includeJournal', String(f.includeJournal));
+          return '/api/pages/filter?' + p.toString();
+        },
+
+        async refreshPages(record = true) {
+          const useF = this.hasFilter();
+          const req = { method: 'GET', url: useF ? this.filterURL() : '/api/pages' };
+          await this.run(useF ? '过滤页面' : '刷新页面', req, async () => {
+            const data = await this.api(req.url);
+            const pages = useF ? (data?.items || []) : (data || []);
+            this.pageList = pages.sort((a, b) => (a.originalName || a.name || '').localeCompare(b.originalName || b.name || ''));
+            const total = useF ? Number(data?.total || pages.length) : pages.length;
+            const filtered = useF ? Number(data?.filteredTotal || pages.length) : pages.length;
+            this.pageSummary = useF ? '已过滤: ' + filtered + '/' + total : '共 ' + total + ' 页';
+            return { total, filtered };
+          });
+        },
+
+        async loadPage() {
+          if (!this.currentPage) { this.print('请输入页面名'); return; }
+          const req = { method: 'GET', url: '/api/page?name=' + encodeURIComponent(this.currentPage) };
+          await this.run('加载页面', req, () => this.api(req.url));
+        },
+
+        async createPage() {
+          if (!this.newPageName) { this.print('请输入页面名'); return; }
+          const req = { method: 'POST', url: '/api/page', body: JSON.stringify({ name: this.newPageName }) };
+          const d = await this.run('创建页面', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+          if (d) { this.currentPage = this.newPageName; this.refreshPages(false); }
+        },
+
+        async deletePage() {
+          if (!this.currentPage || !confirm('确认删除: ' + this.currentPage + ' ?')) return;
+          const req = { method: 'DELETE', url: '/api/page?name=' + encodeURIComponent(this.currentPage) };
+          await this.run('删除页面', req, () => this.api(req.url, { method: 'DELETE' }));
+          this.refreshPages(false);
+        },
+
+        async renamePage() {
+          if (!this.currentPage || !this.renameNewName) { this.print('需要当前页面名和新名'); return; }
+          const req = { method: 'POST', url: '/api/page/rename', body: JSON.stringify({ oldName: this.currentPage, newName: this.renameNewName }) };
+          const d = await this.run('重命名', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+          if (d) { this.currentPage = this.renameNewName; this.refreshPages(false); }
+        },
+
+        async pageRefs() {
+          if (!this.currentPage) { this.print('请选择页面'); return; }
+          const req = { method: 'GET', url: '/api/page/refs?name=' + encodeURIComponent(this.currentPage) };
+          await this.run('反向引用', req, () => this.api(req.url));
+        },
+
+        async pageProps() {
+          if (!this.currentPage) { this.print('请选择页面'); return; }
+          const req = { method: 'GET', url: '/api/page/properties?name=' + encodeURIComponent(this.currentPage) };
+          await this.run('页面属性', req, () => this.api(req.url));
+        },
+
+        async setPageProps() {
+          if (!this.currentPage || !this.pagePropsText.trim()) { this.print('需要页面名和属性'); return; }
+          const props = {};
+          for (const line of this.pagePropsText.split('\n')) {
+            const idx = line.indexOf('='); if (idx < 1) continue;
+            props[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+          }
+          if (!Object.keys(props).length) { this.print('无有效属性'); return; }
+          const req = { method: 'POST', url: '/api/page/properties', body: JSON.stringify({ name: this.currentPage, properties: props }) };
+          await this.run('设置属性', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async pageNamespace(tree) {
+          const ns = this.nsInput || this.currentPage;
+          if (!ns) { this.print('请输入命名空间'); return; }
+          const req = { method: 'GET', url: '/api/page/namespace?name=' + encodeURIComponent(ns) + (tree ? '&tree=true' : '') };
+          await this.run('命名空间', req, () => this.api(req.url));
+        },
+
+        async appendBlock() {
+          if (!this.currentPage || !this.appendText.trim()) { this.print('需要页面名和内容'); return; }
+          const req = { method: 'POST', url: '/api/block/append', body: JSON.stringify({ page: this.currentPage, content: this.appendText }) };
+          const d = await this.run('追加块', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+          if (d?.uuid) this.block.updateUUID = d.uuid;
+        },
+
+        async prependBlock() {
+          if (!this.currentPage || !this.appendText.trim()) { this.print('需要页面名和内容'); return; }
+          const req = { method: 'POST', url: '/api/block/prepend', body: JSON.stringify({ page: this.currentPage, content: this.appendText }) };
+          const d = await this.run('插入页首', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+          if (d?.uuid) this.block.updateUUID = d.uuid;
+        },
+
+        async getBlock() {
+          if (!this.block.getUUID) { this.print('请输入UUID'); return; }
+          const req = { method: 'GET', url: '/api/block?uuid=' + encodeURIComponent(this.block.getUUID) + '&children=' + this.block.getChildren };
+          await this.run('获取块', req, () => this.api(req.url));
+        },
+
+        async insertBlock() {
+          if (!this.block.insertTarget || !this.block.insertContent) { this.print('需要UUID和内容'); return; }
+          const req = { method: 'POST', url: '/api/block/insert', body: JSON.stringify({ targetUUID: this.block.insertTarget, content: this.block.insertContent, sibling: this.block.insertSibling }) };
+          const d = await this.run('插入块', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+          if (d?.uuid) this.block.updateUUID = d.uuid;
+        },
+
+        async updateBlock() {
+          if (!this.block.updateUUID || !this.block.updateContent) { this.print('需要UUID和内容'); return; }
+          const req = { method: 'POST', url: '/api/block/update', body: JSON.stringify({ uuid: this.block.updateUUID, content: this.block.updateContent }) };
+          await this.run('更新块', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async removeBlock() {
+          if (!this.block.updateUUID || !confirm('确认删除块: ' + this.block.updateUUID + ' ?')) return;
+          const req = { method: 'POST', url: '/api/block/remove', body: JSON.stringify({ uuid: this.block.updateUUID }) };
+          await this.run('删除块', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async moveBlock() {
+          if (!this.block.moveSrc || !this.block.moveTarget) { this.print('需要源和目标UUID'); return; }
+          const req = { method: 'POST', url: '/api/block/move', body: JSON.stringify({ srcUUID: this.block.moveSrc, targetUUID: this.block.moveTarget, before: this.block.moveBefore }) };
+          await this.run('移动块', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async getBlockProps() {
+          if (!this.block.propUUID) { this.print('请输入UUID'); return; }
+          const req = { method: 'GET', url: '/api/block/property?uuid=' + encodeURIComponent(this.block.propUUID) };
+          await this.run('块属性', req, () => this.api(req.url));
+        },
+
+        async setBlockProp() {
+          if (!this.block.propUUID || !this.block.propKey) { this.print('需要UUID和属性键'); return; }
+          let value = this.block.propValue; try { value = JSON.parse(value); } catch (_) { }
+          const req = { method: 'POST', url: '/api/block/property', body: JSON.stringify({ uuid: this.block.propUUID, key: this.block.propKey, value, action: 'set' }) };
+          await this.run('设置块属性', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async removeBlockProp() {
+          if (!this.block.propUUID || !this.block.propKey) { this.print('需要UUID和属性键'); return; }
+          const req = { method: 'POST', url: '/api/block/property', body: JSON.stringify({ uuid: this.block.propUUID, key: this.block.propKey, action: 'remove' }) };
+          await this.run('删除块属性', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async collapseBlock(collapsed) {
+          if (!this.block.collapseUUID) { this.print('请输入UUID'); return; }
+          const req = { method: 'POST', url: '/api/block/collapse', body: JSON.stringify({ uuid: this.block.collapseUUID, collapsed }) };
+          await this.run(collapsed ? '折叠块' : '展开块', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async refreshTagTab() {
+          const req = { method: 'GET', url: '/api/tags' };
+          await this.run('刷新标签列表', req, async () => {
+            const tags = await this.api(req.url);
+            this.tagListAll = (tags || []).sort();
+            this.filterTagList();
+            this.tagList = this.tagListAll;
+            return { count: this.tagListAll.length };
+          });
+        },
+
+        filterTagList() {
+          if (!this.tagFilter) { this.tagListFiltered = this.tagListAll; return; }
+          const q = this.tagFilter.toLowerCase();
+          this.tagListFiltered = this.tagListAll.filter(t => t.toLowerCase().includes(q));
+        },
+
+        async selectTag(tag) {
+          this.selectedTag = tag;
+          await this.loadTagPages();
+        },
+
+        async loadTagPages() {
+          if (!this.selectedTag) return;
+          const req = { method: 'GET', url: '/api/pages/filter?tag=' + encodeURIComponent(this.selectedTag) + '&includeJournal=true' };
+          await this.run('标签页面', req, async () => {
+            const data = await this.api(req.url);
+            const pages = data?.items || [];
+            this.tagPages = pages.sort((a, b) => (a.originalName || a.name || '').localeCompare(b.originalName || b.name || ''));
+            return { tag: this.selectedTag, count: this.tagPages.length };
+          });
+        },
+
+        tagPageDetail(p) {
+          const req = { method: 'GET', url: '/api/page?name=' + encodeURIComponent(p.originalName || p.name) };
+          this.run('页面详情', req, () => this.api(req.url));
+        },
+
+        async doSearch() {
+          if (!this.searchQ) { this.print('请输入关键词'); return; }
+          const p = new URLSearchParams(); p.set('q', this.searchQ); if (this.searchTag) p.set('tag', this.searchTag);
+          const req = { method: 'GET', url: '/api/search?' + p.toString() };
+          await this.run('搜索', req, () => this.api(req.url));
+        },
+
+        currentExample() { return this.datalogExamples.find(e => e.key === this.selectedExample) || this.datalogExamples[0]; },
+
+        applyExample() {
+          const e = this.currentExample(); if (!e) return;
+          this.queryText = e.query; this.exampleDesc = e.desc;
+        },
+
+        async runDatalog() {
+          if (!this.queryText) { this.print('请输入查询'); return; }
+          const req = { method: 'POST', url: '/api/query/datalog', body: JSON.stringify({ query: this.queryText }) };
+          await this.run('Datalog', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async runDSL() {
+          if (!this.queryText) { this.print('请输入查询'); return; }
+          const req = { method: 'POST', url: '/api/query/dsl', body: JSON.stringify({ query: this.queryText }) };
+          await this.run('DSL', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async runHealth() {
+          const req = { method: 'GET', url: '/api/health' };
+          await this.run('健康检查', req, () => this.api(req.url));
+        },
+        async runGraph() {
+          const req = { method: 'GET', url: '/api/graph' };
+          await this.run('Graph信息', req, () => this.api(req.url));
+        },
+        async runGraphConfig() {
+          const req = { method: 'GET', url: '/api/graph/config' };
+          await this.run('用户配置', req, () => this.api(req.url));
+        },
+      };
+    }
+  </script>
 </body>
 
 </html>

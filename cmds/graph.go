@@ -21,6 +21,14 @@ func GraphCmd() *redant.Command {
 					return client.GetCurrentGraph(ctx)
 				}),
 			},
+			{
+				Use:   "config",
+				Short: "Get user configuration",
+				ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) (map[string]any, error) {
+					client := NewClient()
+					return client.GetUserConfigs(ctx)
+				}),
+			},
 		},
 	}
 }

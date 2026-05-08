@@ -2,10 +2,12 @@ package cmds
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
 	"github.com/pubgo/logseq-cli/pkg/logseq"
+	"github.com/pubgo/redant"
 )
 
 var (
@@ -94,4 +96,16 @@ func NewClient() *logseq.Client {
 		logseq.WithBaseURL(resolved.info.BaseURL),
 		logseq.WithToken(resolved.token),
 	)
+}
+
+// readContent returns content from the argument, or reads from stdin if arg is "-".
+func readContent(inv *redant.Invocation, arg string) (string, error) {
+	if arg != "-" {
+		return arg, nil
+	}
+	data, err := io.ReadAll(inv.Stdin)
+	if err != nil {
+		return "", fmt.Errorf("reading stdin: %w", err)
+	}
+	return strings.TrimRight(string(data), "\n"), nil
 }
