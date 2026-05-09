@@ -90,3 +90,41 @@
 
 - 先使用 `mcp serve` 验证服务可启动
 - 再检查本地 `redant` 代码版本是否与当前仓库兼容
+
+## 8. 最小接入验收（建议照抄）
+
+当你把 MCP 配置接入客户端后，建议用下面 4 步做首轮验收：
+
+1. 能力探测（只读）
+
+- `logseq capabilities get`
+
+2. 检索（分页）
+
+- `logseq search-notes logseq --limit 5`
+
+3. 页面上下文（裁剪）
+
+- `logseq page get-context logseq --max-blocks 20 --max-depth 3 --include-properties false`
+
+4. 安全写入预演（不落盘）
+
+- `logseq page append-safe logseq "llm mcp dry-run check" --dry-run`
+
+如果以上命令都返回统一 envelope（`ok/data/error/meta/hints`），说明“LLM 可稳定接入”的核心链路已打通。
+
+## 9. 给 LLM 的系统提示词（可直接粘贴）
+
+可把下面内容放到 MCP 客户端的系统提示中：
+
+- 先执行 `logseq capabilities get`，再决定调用路径。
+- 读操作优先：`search-notes`、`page get-context`、`query datalog`。
+- 写操作必须先 `--dry-run`，确认后再执行真实写入。
+- 删除类操作必须显式确认；默认优先 `block delete-safe --dry-run`。
+- 分页读取时优先使用 `next_cursor/has_more`，避免一次请求过大。
+- 若 `dsl_query` 不可用，优先回退到 datalog 或已封装命令。
+
+推荐直接使用示例文件：
+
+- 系统提示词：`docs/examples/llm_system_prompt_logseq_mcp.txt`
+- 首轮用户提示模板：`docs/examples/llm_first_turn_template.txt`

@@ -93,6 +93,7 @@
 随后可优先使用：
 
 - `logseq search-notes <query> --limit 20 --cursor <cursor>`
+- `logseq page get-context <name> --max-blocks 200 --max-depth 6 --include-properties false`
 
 该命令提供 LLM 友好结构化结果与分页游标，避免一次性返回过大结果集。
 
@@ -102,6 +103,11 @@
 - `logseq block delete-safe <uuid> --dry-run`
 
 并在确认后加 `--confirm` 执行实际写入/删除。
+
+可直接复用的系统提示词模板见：
+
+- `docs/examples/llm_system_prompt_logseq_mcp.txt`
+- `docs/examples/llm_first_turn_template.txt`（首轮对话可直接粘贴）
 
 ## 端到端集成测试（E2E）
 
