@@ -13,8 +13,9 @@ func WebUICmd() *redant.Command {
 	var open bool
 
 	return &redant.Command{
-		Use:   "webui",
-		Short: "Start a simple web UI for Logseq data operations",
+		Use:      "webui",
+		Short:    "Start a simple web UI for Logseq data operations",
+		Metadata: redant.InfraMetadata,
 		Options: redant.OptionSet{
 			{
 				Flag:        "addr",
