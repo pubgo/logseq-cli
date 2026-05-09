@@ -1221,6 +1221,13 @@ func (s *Server) handleBlockUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetch updated block to return consistent response
+	block, err := s.client.GetBlock(ctx, req.UUID, false)
+	if err == nil && block != nil {
+		writeOK(w, block)
+		return
+	}
+
 	writeOK(w, map[string]any{
 		"message": "updated block: " + req.UUID,
 	})
@@ -1290,6 +1297,11 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		result = filterSearchResultByPageSet(result, pageSet)
+	}
+
+	// Filter out empty block objects from search results
+	if result != nil {
+		result.Blocks = filterEmptyBlocks(result.Blocks)
 	}
 
 	writeOK(w, result)
@@ -1502,9 +1514,20 @@ func searchBlockKey(b logseq.SearchBlock) string {
 	content := strings.ToLower(strings.TrimSpace(b.Content))
 	page := strings.ToLower(strings.TrimSpace(b.Page))
 	if content == "" && page == "" {
-		return ""
+		return "" // empty block — will be filtered out
 	}
 	return "cp:" + page + "|" + content
+}
+
+// filterEmptyBlocks removes search blocks that have no meaningful data.
+func filterEmptyBlocks(blocks []logseq.SearchBlock) []logseq.SearchBlock {
+	result := make([]logseq.SearchBlock, 0, len(blocks))
+	for _, b := range blocks {
+		if b.UUID != "" || b.Content != "" {
+			result = append(result, b)
+		}
+	}
+	return result
 }
 
 func pageNameInSet(name string, set map[string]struct{}) bool {

@@ -2136,7 +2136,9 @@
           }
           for (const b of blocks) {
             const content = b.content || b['block/content'] || '';
-            this.searchResults.push({ type: 'block', title: content.slice(0, 80), snippet: content.length > 80 ? content : '', uuid: b.uuid || b['block/uuid'] || '', page: b.page?.name || b.page?.originalName || '' });
+            if (!content && !(b.uuid || b['block/uuid'])) continue; // skip empty blocks
+            const pg = typeof b.page === 'object' ? (b.page?.name || b.page?.originalName || '') : (b.page || '');
+            this.searchResults.push({ type: 'block', title: content.slice(0, 80), snippet: content.length > 80 ? content : '', uuid: b.uuid || b['block/uuid'] || '', page: pg });
           }
           if (!this.searchResults.length && Array.isArray(data)) {
             for (const item of data) {

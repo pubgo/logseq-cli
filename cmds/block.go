@@ -326,14 +326,19 @@ func blockUpdateCmd() *redant.Command {
 			{Name: "uuid", Required: true, Value: redant.StringOf(new(string)), Description: "Block UUID"},
 			{Name: "content", Required: true, Value: redant.StringOf(new(string)), Description: "New block content (use '-' for stdin)"},
 		},
-		ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) (StatusResult, error) {
+		ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) (any, error) {
 			content, err := readContent(inv, inv.Args[1])
 			if err != nil {
-				return StatusResult{}, err
+				return nil, err
 			}
 			client := NewClient()
 			if err := client.UpdateBlock(ctx, inv.Args[0], content); err != nil {
-				return StatusResult{}, err
+				return nil, err
+			}
+			// Fetch updated block for consistent response
+			block, err := client.GetBlock(ctx, inv.Args[0], false)
+			if err == nil && block != nil {
+				return block, nil
 			}
 			return StatusResult{OK: true, Message: "updated block: " + inv.Args[0]}, nil
 		}),
