@@ -12,18 +12,43 @@
       position: relative;
     }
 
-    .outline-tree .outline-node::before {
-      content: '';
+    .outline-tree .outline-guides {
       position: absolute;
       left: 0;
       top: 0;
       bottom: 0;
-      width: 1px;
-      background: rgba(100, 116, 139, 0.15);
+      pointer-events: none;
     }
 
-    .outline-tree .outline-node:last-child::before {
-      bottom: 50%;
+    .outline-tree .outline-row {
+      position: relative;
+      border-left: 1px solid transparent;
+    }
+
+    .outline-tree .outline-row--active {
+      border-left-color: rgba(129, 140, 248, 0.8);
+      background: linear-gradient(90deg, rgba(49, 46, 129, 0.45) 0%, rgba(49, 46, 129, 0.12) 30%, rgba(15, 23, 42, 0) 58%);
+      box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.2);
+    }
+
+    .outline-tree .outline-row--todo {
+      border-left-color: rgba(251, 191, 36, 0.35);
+      background: linear-gradient(90deg, rgba(120, 53, 15, 0.22) 0%, rgba(120, 53, 15, 0.06) 24%, transparent 48%);
+    }
+
+    .outline-tree .outline-row--doing {
+      border-left-color: rgba(96, 165, 250, 0.45);
+      background: linear-gradient(90deg, rgba(30, 58, 138, 0.22) 0%, rgba(30, 58, 138, 0.06) 24%, transparent 48%);
+    }
+
+    .outline-tree .outline-row--done {
+      border-left-color: rgba(52, 211, 153, 0.38);
+      background: linear-gradient(90deg, rgba(6, 78, 59, 0.24) 0%, rgba(6, 78, 59, 0.05) 24%, transparent 48%);
+    }
+
+    .outline-tree .outline-row--cancelled {
+      border-left-color: rgba(100, 116, 139, 0.38);
+      background: linear-gradient(90deg, rgba(51, 65, 85, 0.22) 0%, rgba(51, 65, 85, 0.05) 24%, transparent 48%);
     }
 
     .outline-node .bullet-dot {
@@ -38,6 +63,18 @@
     .outline-actions {
       opacity: 0;
       transition: opacity 0.15s;
+    }
+
+    .outline-preview {
+      opacity: 0;
+      max-height: 0;
+      overflow: hidden;
+      transition: opacity 0.15s, max-height 0.15s;
+    }
+
+    .outline-row:hover .outline-preview {
+      opacity: 1;
+      max-height: 2.6em;
     }
 
     .outline-node:hover>.outline-row .outline-actions {
@@ -129,7 +166,7 @@
           </div>
           <div>
             <h1 class="text-lg md:text-xl font-semibold">logseq-cli WebUI</h1>
-            <p class="text-xs text-slate-500 mt-0.5">⌘K 搜索 · ⌘1-6 切换标签页</p>
+            <p class="text-xs text-slate-500 mt-0.5">⌘K 搜索 · ⌘1-6 切换标签页 · ⌥←/⌥→ 折叠展开当前节点</p>
           </div>
         </div>
         <template x-if="conn">
@@ -320,7 +357,19 @@
                 <span class="text-[11px] text-slate-500 tabular-nums"
                   x-text="pageBlocks.length?pageBlocks.length+' blocks':''"></span>
               </div>
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2 flex-wrap justify-end">
+                <button
+                  class="text-xs px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700/50 text-slate-400 hover:text-slate-200 transition-colors"
+                  @click="collapseAllOutline()">折叠全部</button>
+                <button
+                  class="text-xs px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700/50 text-slate-400 hover:text-slate-200 transition-colors"
+                  @click="expandAllOutline()">展开全部</button>
+                <button class="text-xs px-2.5 py-1 rounded-md border transition-colors"
+                  :class="outlineCompact ? 'bg-indigo-900/50 border-indigo-700 text-indigo-200' : 'bg-slate-800 border-slate-700/50 text-slate-400 hover:text-slate-200 hover:bg-slate-700'"
+                  @click="toggleOutlineCompact()" x-text="outlineCompact?'宽松':'紧凑'"></button>
+                <button class="text-xs px-2.5 py-1 rounded-md border transition-colors"
+                  :class="outlineHideEmpty ? 'bg-cyan-900/50 border-cyan-700 text-cyan-200' : 'bg-slate-800 border-slate-700/50 text-slate-400 hover:text-slate-200 hover:bg-slate-700'"
+                  @click="toggleOutlineHideEmpty()" x-text="outlineHideEmpty?'显示空行':'隐藏空行'"></button>
                 <button
                   class="text-xs px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700/50 text-slate-400 hover:text-slate-200 transition-colors"
                   @click="loadPage()">↻</button>
@@ -348,10 +397,22 @@
             <!-- Outline blocks -->
             <div class="max-h-[600px] overflow-auto outline-tree pr-1"
               style="scrollbar-width:thin;scrollbar-color:#334155 transparent">
-              <template x-for="(b,i) in pageBlocks" :key="b.uuid||i">
+              <template x-for="b in visiblePageBlocks()" :key="outlineBlockKey(b)">
                 <div class="outline-node" :style="'padding-left:'+(b.level||0)*22+'px'">
+                  <div class="outline-guides" :style="outlineGuidesStyle(b.level||0)"></div>
                   <div
-                    class="outline-row flex items-start gap-0 rounded-md px-1 -mx-1 hover:bg-slate-800/30 transition-colors">
+                    class="outline-row flex items-start gap-0 rounded-md px-1 -mx-1 hover:bg-slate-800/30 transition-colors"
+                    :class="[outlineRowClass(b), isOutlineActive(b) ? 'outline-row--active' : '']"
+                    @click="setOutlineActive(b)">
+                    <!-- Fold toggle -->
+                    <div class="shrink-0 mt-[6px] mr-1 w-10 flex items-center gap-1 justify-start">
+                      <button x-show="b.hasChildren"
+                        class="text-xs text-slate-500 hover:text-slate-200 transition-colors cursor-pointer"
+                        @click="toggleOutlineCollapse(b)" x-text="isOutlineCollapsed(b)?'▸':'▾'"></button>
+                      <span x-show="b.hasChildren && outlineDescendantCount(b)"
+                        class="text-[10px] leading-none px-1 py-0.5 rounded bg-slate-800/90 text-slate-400 border border-slate-700/70"
+                        x-text="outlineDescendantCount(b)"></span>
+                    </div>
                     <!-- Bullet -->
                     <div class="outline-bullet shrink-0 mt-[9px] mr-2 flex items-center justify-center w-4">
                       <template x-if="b.marker==='TODO'">
@@ -389,10 +450,14 @@
                       </template>
                     </div>
                     <!-- Content -->
-                    <div class="flex-1 min-w-0 py-1.5">
+                    <div class="flex-1 min-w-0" :class="outlineCompact ? 'py-0.5' : 'py-1.5'">
                       <div class="md-content text-[13px] leading-[1.7] text-slate-200/90 break-words"
                         :class="{'line-through opacity-50': b.marker==='DONE'||b.marker==='CANCELLED'}"
                         x-html="renderMd(b.content)||'<span class=\'text-slate-600 italic text-xs\'>(空)</span>'"></div>
+                      <template x-if="isOutlineCollapsed(b) && b.descendantPreview">
+                        <div class="outline-preview text-[11px] text-slate-500 mt-0.5 truncate"
+                          x-text="b.descendantPreview"></div>
+                      </template>
                       <!-- Priority badge -->
                       <template x-if="b.priority">
                         <span
@@ -590,11 +655,14 @@
         <span class="font-semibold text-sm">全文搜索</span>
         <div class="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm">
           <input x-model="searchQ" @keydown.enter="doSearch()"
-            class="md:col-span-2 px-3 py-2 rounded bg-slate-950 border border-slate-700" placeholder="关键词 (Enter 搜索)" />
+            class="md:col-span-2 px-3 py-2 rounded bg-slate-950 border border-slate-700"
+            placeholder="关键词，支持多词(空格=AND) / 引号短语" />
           <input x-model="searchTag" class="px-3 py-2 rounded bg-slate-950 border border-slate-700"
             placeholder="标签过滤（可选）" />
           <button class="px-3 py-2 rounded bg-violet-700 hover:bg-violet-600" @click="doSearch()">搜索</button>
         </div>
+        <div class="text-xs text-slate-400">示例：<code>golang logseq</code>（同时包含） / <code>"outline mode" render</code>（短语
+          + 关键词）</div>
       </div>
 
       <!-- Structured search results -->
@@ -815,18 +883,36 @@
         </div>
 
         <div class="rounded border border-slate-800 bg-slate-950/60 p-3 space-y-2">
-          <div class="text-xs text-slate-300">Datalog 示例</div>
+          <div class="flex items-center justify-between">
+            <div class="text-xs text-slate-300">查询示例</div>
+            <div class="inline-flex rounded border border-slate-700 overflow-hidden text-xs">
+              <button class="px-2 py-1"
+                :class="queryLang==='datalog' ? 'bg-indigo-700 text-white' : 'bg-slate-900 text-slate-400 hover:text-slate-200'"
+                @click="queryLang='datalog';exampleDesc=currentExample()?.desc||''">Datalog</button>
+              <button class="px-2 py-1"
+                :class="queryLang==='dsl' ? 'bg-indigo-700 text-white' : 'bg-slate-900 text-slate-400 hover:text-slate-200'"
+                @click="queryLang='dsl';exampleDesc=currentExample()?.desc||''">DSL</button>
+            </div>
+          </div>
           <div class="flex flex-wrap gap-2">
-            <select x-model="selectedExample" @change="exampleDesc=currentExample()?.desc||''"
+            <select x-show="queryLang==='datalog'" x-model="selectedDatalogExample"
+              @change="exampleDesc=currentExample()?.desc||''"
               class="flex-1 min-w-[200px] px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm">
               <template x-for="e in datalogExamples" :key="e.key">
+                <option :value="e.key" x-text="e.title"></option>
+              </template>
+            </select>
+            <select x-show="queryLang==='dsl'" x-model="selectedDSLExample"
+              @change="exampleDesc=currentExample()?.desc||''"
+              class="flex-1 min-w-[200px] px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm">
+              <template x-for="e in dslExamples" :key="e.key">
                 <option :value="e.key" x-text="e.title"></option>
               </template>
             </select>
             <button class="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600 text-sm"
               @click="applyExample()">填充</button>
             <button class="px-3 py-2 rounded bg-emerald-700 hover:bg-emerald-600 text-sm"
-              @click="applyExample();runDatalog()">填充并执行</button>
+              @click="applyExample();runExample()">填充并执行</button>
           </div>
           <div class="text-xs text-slate-400" x-text="exampleDesc"></div>
         </div>
@@ -1187,25 +1273,51 @@
           { key: 'estimate', label: '数值', schema: { type: 'number', cardinality: 'one', public: true } },
           { key: 'tags', label: '多值标签', schema: { type: 'default', cardinality: 'many', public: true } },
         ],
+        outlineCollapsed: {},
+        outlineCompact: false,
+        outlineHideEmpty: false,
+        outlineActive: '',
         queryText: '',
-        selectedExample: 'page-all',
+        queryLang: 'datalog',
+        selectedDatalogExample: 'page-all',
+        selectedDSLExample: 'dsl-todo',
         exampleDesc: '',
         datalogExamples: [
           { key: 'page-all', title: '所有页面名', desc: '验证查询链路', query: '[:find ?name :where [?p :block/name ?name]]' },
+          { key: 'page-journal', title: '最近 Journal 页面', desc: '查看 Journal 名称（前20）', query: '[:find ?name :where [?p :block/name ?name] [?p :block/journal? true] :limit 20]' },
+          { key: 'page-with-status', title: '包含 status 属性的页面', desc: '用于元数据清点', query: '[:find ?name :where [?p :block/name ?name] [?p :block/properties ?props] [(get ?props :status) ?status]]' },
           { key: 'todo', title: 'TODO 块', desc: '标记为 TODO 的任务', query: '[:find ?content :where [?b :block/marker "TODO"] [?b :block/content ?content]]' },
+          { key: 'doing', title: 'DOING 块', desc: '进行中的任务', query: '[:find ?content :where [?b :block/marker "DOING"] [?b :block/content ?content]]' },
           { key: 'priority-a', title: 'A 优先级', desc: '高优先级任务', query: '[:find ?content :where [?b :block/priority "A"] [?b :block/content ?content]]' },
+          { key: 'block-with-deadline', title: '含 deadline 的块', desc: '筛查时间相关任务', query: '[:find ?content ?deadline :where [?b :block/content ?content] [?b :block/properties ?props] [(get ?props :deadline) ?deadline]]' },
           { key: 'tagged', title: '带标签的块', desc: '有 refs 的块', query: '[:find ?content :where [?b :block/tags ?t] [?b :block/content ?content]]' },
+          { key: 'ref-page', title: '引用页面的块', desc: '通过 refs 反查块内容', query: '[:find ?content ?page :where [?b :block/content ?content] [?b :block/refs ?r] [?r :block/name ?page]]' },
           { key: 'recent', title: '最近更新(前20)', desc: '按更新时间倒序', query: '[:find ?content ?updated :where [?b :block/content ?content] [?b :block/updated-at ?updated] :order-by [(desc ?updated)] :limit 20]' },
+          { key: 'long-blocks', title: '长文本块(前20)', desc: '快速发现内容较长条目', query: '[:find ?content :where [?b :block/content ?content] [(count ?content) ?len] [(> ?len 120)] :limit 20]' },
+        ],
+        dslExamples: [
+          { key: 'dsl-todo', title: '任务：TODO/DOING', desc: '按任务状态筛选（DSL）', query: '{:query [:find (pull ?b [*]) :where [?b :block/marker ?m] [(contains? #{"TODO" "DOING"} ?m)]] :limit 20}' },
+          { key: 'dsl-priority', title: '高优先级任务', desc: '筛选 priority A/B（DSL）', query: '{:query [:find (pull ?b [*]) :where [?b :block/priority ?p] [(contains? #{"A" "B"} ?p)]] :limit 30}' },
+          { key: 'dsl-page-by-name', title: '页面名模糊匹配', desc: '按页面名关键词筛选（DSL）', query: '{:query [:find (pull ?p [*]) :where [?p :block/name ?name] [(clojure.string/includes? ?name "project")]] :limit 20}' },
+          { key: 'dsl-updated', title: '最近更新块', desc: '按更新时间降序（DSL）', query: '{:query [:find (pull ?b [*]) :where [?b :block/updated-at ?u]] :sort-by [[:block/updated-at :desc]] :limit 20}' },
         ],
 
         async init() {
-          this.exampleDesc = this.datalogExamples[0]?.desc || '';
+          this.exampleDesc = this.currentExample()?.desc || '';
           await Promise.all([this.loadConn(false), this.loadTags(false), this.refreshPages(false)]);
           // Keyboard shortcuts
           document.addEventListener('keydown', (e) => {
             const isMod = e.metaKey || e.ctrlKey;
             if (isMod && e.key === 'k') { e.preventDefault(); this.activeTab = 'search'; this.$nextTick(() => document.querySelector('[x-model="searchQ"]')?.focus()); }
             if (isMod && e.key >= '1' && e.key <= '6') { e.preventDefault(); const t = this.tabs[parseInt(e.key) - 1]; if (t) this.activeTab = t.key; }
+            if (!isMod && this.activeTab === 'pages' && e.altKey && e.key === 'ArrowLeft') {
+              e.preventDefault();
+              this.collapseActiveOutlineNode();
+            }
+            if (!isMod && this.activeTab === 'pages' && e.altKey && e.key === 'ArrowRight') {
+              e.preventDefault();
+              this.expandActiveOutlineNode();
+            }
           });
         },
 
@@ -1316,6 +1428,161 @@
           this.block.collapseUUID = uuid;
           this.showToast('UUID 已填入块操作区');
         },
+        outlineBlockKey(b) {
+          if (b?.uuid) return 'uuid:' + b.uuid;
+          return 'idx:' + String(b?._idx ?? '');
+        },
+        outlineStateKey(pageName = '') {
+          const name = String(pageName || this.pageDetail?.name || this.currentPage || '').trim();
+          if (!name) return '';
+          return 'logseq-webui:outline:' + encodeURIComponent(name.toLowerCase());
+        },
+        outlineGuidesStyle(level) {
+          const lv = Math.max(0, Number(level) || 0);
+          if (!lv) return 'display:none;';
+          const width = lv * 22;
+          return 'width:' + width + 'px;background-image:repeating-linear-gradient(to right, transparent 0, transparent 20px, rgba(71,85,105,0.45) 20px, rgba(71,85,105,0.45) 21px);';
+        },
+        outlineRowClass(b) {
+          const marker = String(b?.marker || '').toUpperCase();
+          if (marker === 'TODO') return 'outline-row--todo';
+          if (marker === 'DOING' || marker === 'NOW') return 'outline-row--doing';
+          if (marker === 'DONE') return 'outline-row--done';
+          if (marker === 'CANCELLED') return 'outline-row--cancelled';
+          return '';
+        },
+        outlineDescendantCount(b) {
+          return Number(b?.descendantCount || 0);
+        },
+        isOutlineEmpty(b) {
+          const text = String(b?.content || '').trim();
+          const marker = String(b?.marker || '').trim();
+          return text === '' && marker === '';
+        },
+        isOutlineActive(b) {
+          return this.outlineActive !== '' && this.outlineActive === this.outlineBlockKey(b);
+        },
+        setOutlineActive(b) {
+          this.outlineActive = this.outlineBlockKey(b);
+        },
+        getOutlineActiveBlock() {
+          if (this.outlineActive) {
+            const active = this.pageBlocks.find(x => this.outlineBlockKey(x) === this.outlineActive);
+            if (active) return active;
+          }
+          const first = this.visiblePageBlocks()[0] || null;
+          if (first) this.outlineActive = this.outlineBlockKey(first);
+          return first;
+        },
+        collapseActiveOutlineNode() {
+          const b = this.getOutlineActiveBlock();
+          if (!b || !b.hasChildren) return;
+          if (!this.isOutlineCollapsed(b)) {
+            this.toggleOutlineCollapse(b);
+          }
+        },
+        expandActiveOutlineNode() {
+          const b = this.getOutlineActiveBlock();
+          if (!b || !b.hasChildren) return;
+          if (this.isOutlineCollapsed(b)) {
+            this.toggleOutlineCollapse(b);
+          }
+        },
+        saveOutlinePrefs() {
+          const key = this.outlineStateKey();
+          if (!key) return;
+          const payload = {
+            collapsed: this.outlineCollapsed || {},
+            compact: !!this.outlineCompact,
+            hideEmpty: !!this.outlineHideEmpty,
+          };
+          try {
+            localStorage.setItem(key, JSON.stringify(payload));
+          } catch (_) {
+            // ignore browser storage errors
+          }
+        },
+        restoreOutlinePrefs() {
+          this.outlineCollapsed = {};
+          this.outlineHideEmpty = false;
+          this.outlineActive = '';
+          const key = this.outlineStateKey();
+          if (!key) return;
+          try {
+            const raw = localStorage.getItem(key);
+            if (!raw) return;
+            const payload = JSON.parse(raw);
+            if (payload && typeof payload === 'object') {
+              if (payload.collapsed && typeof payload.collapsed === 'object' && !Array.isArray(payload.collapsed)) {
+                this.outlineCollapsed = payload.collapsed;
+              }
+              if (typeof payload.compact === 'boolean') {
+                this.outlineCompact = payload.compact;
+              }
+              if (typeof payload.hideEmpty === 'boolean') {
+                this.outlineHideEmpty = payload.hideEmpty;
+              }
+            }
+          } catch (_) {
+            // ignore invalid json / storage errors
+          }
+        },
+        isOutlineCollapsed(b) {
+          return !!this.outlineCollapsed[this.outlineBlockKey(b)];
+        },
+        toggleOutlineCollapse(b) {
+          const key = this.outlineBlockKey(b);
+          this.outlineCollapsed = {
+            ...this.outlineCollapsed,
+            [key]: !this.outlineCollapsed[key],
+          };
+          this.saveOutlinePrefs();
+        },
+        collapseAllOutline() {
+          const next = {};
+          for (const b of this.pageBlocks) {
+            if (b?.hasChildren) next[this.outlineBlockKey(b)] = true;
+          }
+          this.outlineCollapsed = next;
+          this.saveOutlinePrefs();
+        },
+        expandAllOutline() {
+          this.outlineCollapsed = {};
+          this.saveOutlinePrefs();
+        },
+        toggleOutlineCompact() {
+          this.outlineCompact = !this.outlineCompact;
+          this.saveOutlinePrefs();
+        },
+        toggleOutlineHideEmpty() {
+          this.outlineHideEmpty = !this.outlineHideEmpty;
+          this.saveOutlinePrefs();
+        },
+        visiblePageBlocks() {
+          const out = [];
+          const hiddenLevels = [];
+
+          for (const b of this.pageBlocks) {
+            while (hiddenLevels.length && (b.level || 0) <= hiddenLevels[hiddenLevels.length - 1]) {
+              hiddenLevels.pop();
+            }
+
+            if (hiddenLevels.length) {
+              continue;
+            }
+
+            if (this.outlineHideEmpty && this.isOutlineEmpty(b) && !b.hasChildren) {
+              continue;
+            }
+
+            out.push(b);
+            if (b.hasChildren && this.isOutlineCollapsed(b)) {
+              hiddenLevels.push(b.level || 0);
+            }
+          }
+
+          return out;
+        },
         applyStatePreset() {
           if (!this.selectedStatePreset) return;
           this.graphState.key = this.selectedStatePreset;
@@ -1332,7 +1599,7 @@
         async runQuickSmoke() {
           const req = { method: 'CUSTOM', url: '/api/quick-smoke' };
           await this.run('一键轻量验证', req, async () => {
-            const summary = { ok: true, checks: [] };
+            const summary = { ok: true, warn: false, checks: [] };
             const checks = [
               ['health', '/api/health'],
               ['graph', '/api/graph'],
@@ -1347,9 +1614,21 @@
                 const count = Array.isArray(data) ? data.length : undefined;
                 summary.checks.push({ name, ok: true, count });
               } catch (e) {
+                const msg = String(e?.message || e || 'unknown error');
+                const unsupported = /MethodNotExist/i.test(msg);
+                if (unsupported) {
+                  summary.warn = true;
+                  summary.checks.push({ name, ok: true, warn: true, error: msg });
+                  continue;
+                }
+
                 summary.ok = false;
-                summary.checks.push({ name, ok: false, error: e.message });
+                summary.checks.push({ name, ok: false, error: msg });
               }
+            }
+
+            if (summary.warn) {
+              summary.note = '部分接口在当前 Logseq 版本不可用，已按兼容告警处理';
             }
             return summary;
           });
@@ -1443,6 +1722,8 @@
         parsePageBlocks(data) {
           this.pageBlocks = [];
           this.pageDetail = null;
+          this.outlineCollapsed = {};
+          this.outlineActive = '';
           if (!data) return;
 
           // API returns { page: {...}, blocks: [...] }
@@ -1487,6 +1768,26 @@
           else if (Array.isArray(data)) walk(data, 0);
           else if (data?.children) walk(data.children, 0);
           else if (data?.['block/children']) walk(data['block/children'], 0);
+
+          for (let i = 0; i < this.pageBlocks.length; i++) {
+            const cur = this.pageBlocks[i];
+            cur._idx = i;
+            let count = 0;
+            let preview = '';
+            for (let j = i + 1; j < this.pageBlocks.length; j++) {
+              if ((this.pageBlocks[j].level || 0) <= (cur.level || 0)) break;
+              count++;
+              if (!preview) {
+                const line = String(this.pageBlocks[j].content || '').trim();
+                if (line) preview = line;
+              }
+            }
+            cur.descendantCount = count;
+            cur.hasChildren = count > 0;
+            cur.descendantPreview = preview.length > 120 ? preview.slice(0, 120) + '…' : preview;
+          }
+
+          this.restoreOutlinePrefs();
         },
 
         async createPage() {
@@ -1857,11 +2158,46 @@
           }
         },
 
-        currentExample() { return this.datalogExamples.find(e => e.key === this.selectedExample) || this.datalogExamples[0]; },
+        currentExample() {
+          if (this.queryLang === 'dsl') {
+            return this.dslExamples.find(e => e.key === this.selectedDSLExample) || this.dslExamples[0];
+          }
+          return this.datalogExamples.find(e => e.key === this.selectedDatalogExample) || this.datalogExamples[0];
+        },
 
         applyExample() {
           const e = this.currentExample(); if (!e) return;
           this.queryText = e.query; this.exampleDesc = e.desc;
+        },
+
+        async runExample() {
+          if (this.queryLang === 'dsl') {
+            await this.runDSL();
+            return;
+          }
+          await this.runDatalog();
+        },
+
+        extractDatalogFromDSLWrapper(text) {
+          const s = String(text || '');
+          const keyIdx = s.indexOf(':query');
+          if (keyIdx < 0) return '';
+
+          const start = s.indexOf('[', keyIdx);
+          if (start < 0) return '';
+
+          let depth = 0;
+          for (let i = start; i < s.length; i++) {
+            const ch = s[i];
+            if (ch === '[') depth++;
+            if (ch === ']') {
+              depth--;
+              if (depth === 0) {
+                return s.slice(start, i + 1).trim();
+              }
+            }
+          }
+          return '';
         },
 
         addQueryHistory(q) {
@@ -1877,9 +2213,46 @@
 
         async runDSL() {
           if (!this.queryText) { this.print('请输入查询'); return; }
+
+          if (/^\s*\[/.test(this.queryText)) {
+            this.showToast('检测到 Datalog 语法，已自动切换为 Datalog 执行');
+            await this.runDatalog();
+            return;
+          }
+
+          const extracted = this.extractDatalogFromDSLWrapper(this.queryText);
+          if (extracted) {
+            this.showToast('检测到 DSL 包装查询，已提取 :query 按 Datalog 执行');
+            this.addQueryHistory(this.queryText);
+            const req = { method: 'POST', url: '/api/query/datalog', body: JSON.stringify({ query: extracted }) };
+            await this.run('DSL(兼容回退)', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+            return;
+          }
+
           this.addQueryHistory(this.queryText);
           const req = { method: 'POST', url: '/api/query/dsl', body: JSON.stringify({ query: this.queryText }) };
-          await this.run('DSL', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+          const d = await this.run('DSL', req, async () => {
+            try {
+              return await this.api(req.url, { method: 'POST', body: req.body });
+            } catch (e) {
+              const msg = String(e?.message || e || '');
+              if (!/MethodNotExist|Doesn't support name|\[object Object\]/i.test(msg)) {
+                throw e;
+              }
+
+              const fallbackReq = { method: 'POST', url: '/api/query/datalog', body: JSON.stringify({ query: this.queryText }) };
+              const data = await this.api(fallbackReq.url, { method: 'POST', body: fallbackReq.body });
+              return {
+                fallback: 'datalog',
+                note: '当前 Logseq 版本不支持 DSL API，已自动回退为 Datalog 执行',
+                data,
+              };
+            }
+          });
+
+          if (d?.fallback === 'datalog') {
+            this.showToast('DSL 不可用，已自动回退 Datalog');
+          }
         },
 
         async runHealth() {

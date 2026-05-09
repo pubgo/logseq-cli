@@ -1276,7 +1276,8 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 
-	result, err := s.client.Search(ctx, q)
+	keywords := splitSearchKeywords(q)
+	result, err := s.searchByKeywords(ctx, keywords)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
@@ -1292,6 +1293,76 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeOK(w, result)
+}
+
+func (s *Server) searchByKeywords(ctx context.Context, keywords []string) (*logseq.SearchResult, error) {
+	if len(keywords) == 0 {
+		return &logseq.SearchResult{}, nil
+	}
+
+	first, err := s.client.Search(ctx, keywords[0])
+	if err != nil {
+		return nil, err
+	}
+	if first == nil {
+		return &logseq.SearchResult{}, nil
+	}
+
+	result := cloneSearchResult(first)
+	for _, kw := range keywords[1:] {
+		next, err := s.client.Search(ctx, kw)
+		if err != nil {
+			return nil, err
+		}
+		result = intersectSearchResults(result, next)
+		if len(result.Blocks) == 0 && len(result.Pages) == 0 && len(result.Files) == 0 {
+			break
+		}
+	}
+
+	return result, nil
+}
+
+func splitSearchKeywords(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+
+	out := make([]string, 0)
+	var buf strings.Builder
+	inQuote := false
+	var quote rune
+
+	flush := func() {
+		v := strings.TrimSpace(buf.String())
+		buf.Reset()
+		if v != "" {
+			out = append(out, v)
+		}
+	}
+
+	for _, r := range raw {
+		switch {
+		case (r == '"' || r == '\'') && !inQuote:
+			inQuote = true
+			quote = r
+		case inQuote && r == quote:
+			inQuote = false
+			quote = 0
+		case !inQuote && (r == ' ' || r == '\t' || r == '\n'):
+			flush()
+		default:
+			buf.WriteRune(r)
+		}
+	}
+	flush()
+
+	if len(out) == 0 {
+		return []string{raw}
+	}
+
+	return dedupeStrings(out)
 }
 
 func (s *Server) getSearchPageSetByTag(ctx context.Context, tag string) (map[string]struct{}, error) {
@@ -1353,6 +1424,87 @@ func filterSearchResultByPageSet(in *logseq.SearchResult, pageSet map[string]str
 	}
 
 	return out
+}
+
+func cloneSearchResult(in *logseq.SearchResult) *logseq.SearchResult {
+	if in == nil {
+		return &logseq.SearchResult{}
+	}
+	out := &logseq.SearchResult{}
+	out.Pages = append(out.Pages, in.Pages...)
+	out.Files = append(out.Files, in.Files...)
+	out.Blocks = append(out.Blocks, in.Blocks...)
+	return out
+}
+
+func intersectSearchResults(left, right *logseq.SearchResult) *logseq.SearchResult {
+	if left == nil || right == nil {
+		return &logseq.SearchResult{}
+	}
+
+	pageSet := make(map[string]struct{}, len(right.Pages))
+	for _, p := range right.Pages {
+		k := strings.ToLower(strings.TrimSpace(p))
+		if k != "" {
+			pageSet[k] = struct{}{}
+		}
+	}
+
+	fileSet := make(map[string]struct{}, len(right.Files))
+	for _, f := range right.Files {
+		k := strings.ToLower(strings.TrimSpace(f))
+		if k != "" {
+			fileSet[k] = struct{}{}
+		}
+	}
+
+	blockSet := make(map[string]struct{}, len(right.Blocks))
+	for _, b := range right.Blocks {
+		k := searchBlockKey(b)
+		if k != "" {
+			blockSet[k] = struct{}{}
+		}
+	}
+
+	out := &logseq.SearchResult{
+		Blocks: make([]logseq.SearchBlock, 0, len(left.Blocks)),
+		Pages:  make([]string, 0, len(left.Pages)),
+		Files:  make([]string, 0, len(left.Files)),
+	}
+
+	for _, p := range left.Pages {
+		k := strings.ToLower(strings.TrimSpace(p))
+		if _, ok := pageSet[k]; ok {
+			out.Pages = append(out.Pages, p)
+		}
+	}
+
+	for _, f := range left.Files {
+		k := strings.ToLower(strings.TrimSpace(f))
+		if _, ok := fileSet[k]; ok {
+			out.Files = append(out.Files, f)
+		}
+	}
+
+	for _, b := range left.Blocks {
+		if _, ok := blockSet[searchBlockKey(b)]; ok {
+			out.Blocks = append(out.Blocks, b)
+		}
+	}
+
+	return out
+}
+
+func searchBlockKey(b logseq.SearchBlock) string {
+	if uuid := strings.ToLower(strings.TrimSpace(b.UUID)); uuid != "" {
+		return "uuid:" + uuid
+	}
+	content := strings.ToLower(strings.TrimSpace(b.Content))
+	page := strings.ToLower(strings.TrimSpace(b.Page))
+	if content == "" && page == "" {
+		return ""
+	}
+	return "cp:" + page + "|" + content
 }
 
 func pageNameInSet(name string, set map[string]struct{}) bool {
