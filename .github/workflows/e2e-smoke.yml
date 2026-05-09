@@ -1,0 +1,111 @@
+name: e2e-smoke
+
+on:
+    workflow_dispatch:
+        inputs:
+            host:
+                description: Logseq API host
+                required: false
+                default: "127.0.0.1"
+                type: string
+            port:
+                description: Logseq API port
+                required: false
+                default: "12315"
+                type: string
+            page_prefix:
+                description: Temporary page prefix for e2e run
+                required: false
+                default: "__copilot_e2e_ci"
+                type: string
+            timeout:
+                description: Per command timeout (Go duration, e.g. 60s)
+                required: false
+                default: "60s"
+                type: string
+            keep_page:
+                description: Keep temporary page after run (debug)
+                required: false
+                default: false
+                type: boolean
+    schedule:
+        - cron: "0 3 * * *"
+
+permissions:
+    contents: read
+
+concurrency:
+    group: e2e-smoke-${{ github.ref }}
+    cancel-in-progress: false
+
+jobs:
+    smoke:
+        name: Logseq E2E Smoke
+        runs-on: self-hosted
+        timeout-minutes: 30
+
+        env:
+            LOGSEQ_E2E: "1"
+            LOGSEQ_HOST: "127.0.0.1"
+            LOGSEQ_PORT: "12315"
+            LOGSEQ_E2E_PAGE_PREFIX: "__copilot_e2e_ci"
+            LOGSEQ_E2E_TIMEOUT: "60s"
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Go
+              uses: actions/setup-go@v5
+              with:
+                  go-version-file: go.mod
+
+            - name: Apply workflow dispatch inputs
+              if: ${{ github.event_name == 'workflow_dispatch' }}
+              shell: bash
+              env:
+                  INPUT_HOST: ${{ github.event.inputs.host }}
+                  INPUT_PORT: ${{ github.event.inputs.port }}
+                  INPUT_PAGE_PREFIX: ${{ github.event.inputs.page_prefix }}
+                  INPUT_TIMEOUT: ${{ github.event.inputs.timeout }}
+                  INPUT_KEEP_PAGE: ${{ github.event.inputs.keep_page }}
+              run: |
+                  if [[ -n "${INPUT_HOST}" ]]; then
+                    echo "LOGSEQ_HOST=${INPUT_HOST}" >> "$GITHUB_ENV"
+                  fi
+                  if [[ -n "${INPUT_PORT}" ]]; then
+                    echo "LOGSEQ_PORT=${INPUT_PORT}" >> "$GITHUB_ENV"
+                  fi
+                  if [[ -n "${INPUT_PAGE_PREFIX}" ]]; then
+                    echo "LOGSEQ_E2E_PAGE_PREFIX=${INPUT_PAGE_PREFIX}" >> "$GITHUB_ENV"
+                  fi
+                  if [[ -n "${INPUT_TIMEOUT}" ]]; then
+                    echo "LOGSEQ_E2E_TIMEOUT=${INPUT_TIMEOUT}" >> "$GITHUB_ENV"
+                  fi
+                  if [[ "${INPUT_KEEP_PAGE}" == "true" ]]; then
+                    echo "LOGSEQ_E2E_KEEP_PAGE=1" >> "$GITHUB_ENV"
+                  fi
+
+            - name: Normalize go.mod replace for CI
+              shell: bash
+              run: |
+                  # Keep CI independent from developer-local absolute replace paths.
+                  if grep -q '^replace .* => /' go.mod; then
+                    cp go.mod go.mod.bak
+                    sed '/^replace .* => \/.*/d' go.mod.bak > go.mod
+                    echo "Removed local absolute replace directives from go.mod for CI run"
+                  fi
+
+            - name: Verify required token env
+              shell: bash
+              run: |
+                  if [[ -z "${LOGSEQ_API_TOKEN}" ]]; then
+                    echo "::error::Missing required runner env: LOGSEQ_API_TOKEN"
+                    exit 1
+                  fi
+
+            - name: Baseline tests
+              run: go test ./...
+
+            - name: E2E smoke test
+              run: go test ./cmd/e2e -run TestE2ESmoke -v

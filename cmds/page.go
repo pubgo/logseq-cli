@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/pubgo/logseq-cli/pkg/logseq"
 	"github.com/pubgo/redant"
@@ -16,14 +17,46 @@ func PageCmd() *redant.Command {
 		Short: "Page management",
 		Children: []*redant.Command{
 			pageListCmd(),
+			pageCurrentCmd(),
+			pageCurrentTreeCmd(),
 			pageGetCmd(),
 			pageCreateCmd(),
+			pageJournalCmd(),
 			pageDeleteCmd(),
 			pageRenameCmd(),
 			pageRefsCmd(),
 			pageNamespaceCmd(),
 			pagePropertiesCmd(),
 		},
+	}
+}
+
+func pageCurrentCmd() *redant.Command {
+	return &redant.Command{
+		Use:   "current",
+		Short: "Get currently focused page",
+		ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) (*logseq.Page, error) {
+			client := NewClient()
+			page, err := client.GetCurrentPage(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if page == nil {
+				return nil, fmt.Errorf("no current page")
+			}
+			return page, nil
+		}),
+	}
+}
+
+func pageCurrentTreeCmd() *redant.Command {
+	return &redant.Command{
+		Use:   "current-tree",
+		Short: "Get block tree of currently focused page",
+		ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) ([]logseq.Block, error) {
+			client := NewClient()
+			return client.GetCurrentPageBlocksTree(ctx)
+		}),
 	}
 }
 
@@ -115,6 +148,25 @@ func pageCreateCmd() *redant.Command {
 				}
 			}
 			return page, nil
+		}),
+	}
+}
+
+func pageJournalCmd() *redant.Command {
+	return &redant.Command{
+		Use:   "journal [date]",
+		Short: "Create journal page for date (default: today, format YYYY-MM-DD)",
+		Args: redant.ArgSet{
+			{Name: "date", Required: false, Value: redant.StringOf(new(string)), Description: "Date string in YYYY-MM-DD"},
+		},
+		ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) (*logseq.Page, error) {
+			date := time.Now().Format("2006-01-02")
+			if len(inv.Args) > 0 && strings.TrimSpace(inv.Args[0]) != "" {
+				date = inv.Args[0]
+			}
+
+			client := NewClient()
+			return client.CreateJournalPage(ctx, date)
 		}),
 	}
 }
@@ -241,17 +293,28 @@ func pagePropertiesCmd() *redant.Command {
 				return enc.Encode(StatusResult{OK: true, Message: "properties updated"})
 			}
 
-			// No extra args: get page and print properties
-			page, err := client.GetPage(ctx, name)
-			if err != nil {
-				return err
-			}
-			if page == nil {
-				return fmt.Errorf("page '%s' not found", name)
-			}
 			enc := json.NewEncoder(inv.Stdout)
 			enc.SetIndent("", "  ")
-			if page.Properties == nil {
+
+			// Prefer official API when available.
+			props, err := client.GetPageProperties(ctx, name)
+			if err == nil {
+				if props == nil {
+					return enc.Encode(map[string]any{})
+				}
+				return enc.Encode(props)
+			}
+
+			// Backward compatibility fallback for versions without getPageProperties.
+			if !strings.Contains(strings.ToLower(err.Error()), "methodnotexist") {
+				return err
+			}
+
+			page, getErr := client.GetPage(ctx, name)
+			if getErr != nil {
+				return getErr
+			}
+			if page == nil || page.Properties == nil {
 				return enc.Encode(map[string]any{})
 			}
 			return enc.Encode(page.Properties)

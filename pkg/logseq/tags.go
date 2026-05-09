@@ -5,8 +5,100 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 )
+
+// CreateTag creates a tag page.
+func (c *Client) CreateTag(ctx context.Context, tagName string, customUUID ...string) (*Page, error) {
+	args := []any{tagName}
+	if len(customUUID) > 0 && strings.TrimSpace(customUUID[0]) != "" {
+		args = append(args, map[string]any{"uuid": strings.TrimSpace(customUUID[0])})
+	}
+
+	raw, err := c.CallAPI(ctx, "logseq.Editor.createTag", args...)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+
+	var page Page
+	if err := json.Unmarshal(raw, &page); err != nil {
+		return nil, err
+	}
+	return &page, nil
+}
+
+// GetTag gets a tag by name or numeric entity id (as string).
+func (c *Client) GetTag(ctx context.Context, nameOrIdent string) (*Page, error) {
+	ident := strings.TrimSpace(nameOrIdent)
+	arg := any(ident)
+	if id, err := strconv.ParseInt(ident, 10, 64); err == nil {
+		arg = id
+	}
+
+	raw, err := c.CallAPI(ctx, "logseq.Editor.getTag", arg)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+
+	var page Page
+	if err := json.Unmarshal(raw, &page); err != nil {
+		return nil, err
+	}
+	return &page, nil
+}
+
+// GetTagsByName gets tags by fuzzy/equal name in Logseq.
+func (c *Client) GetTagsByName(ctx context.Context, tagName string) ([]Page, error) {
+	return decode[[]Page](c.CallAPI(ctx, "logseq.Editor.getTagsByName", tagName))
+}
+
+// GetTagObjects gets tag object blocks for the given tag name.
+func (c *Client) GetTagObjects(ctx context.Context, nameOrIdent string) ([]Block, error) {
+	return decode[[]Block](c.CallAPI(ctx, "logseq.Editor.getTagObjects", nameOrIdent))
+}
+
+// AddTagProperty adds property relation to a tag.
+func (c *Client) AddTagProperty(ctx context.Context, tagID, propertyIDOrName string) error {
+	_, err := c.CallAPI(ctx, "logseq.Editor.addTagProperty", tagID, propertyIDOrName)
+	return err
+}
+
+// RemoveTagProperty removes property relation from a tag.
+func (c *Client) RemoveTagProperty(ctx context.Context, tagID, propertyIDOrName string) error {
+	_, err := c.CallAPI(ctx, "logseq.Editor.removeTagProperty", tagID, propertyIDOrName)
+	return err
+}
+
+// AddTagExtends adds parent tag relation for a tag.
+func (c *Client) AddTagExtends(ctx context.Context, tagID, parentTagIDOrName string) error {
+	_, err := c.CallAPI(ctx, "logseq.Editor.addTagExtends", tagID, parentTagIDOrName)
+	return err
+}
+
+// RemoveTagExtends removes parent tag relation for a tag.
+func (c *Client) RemoveTagExtends(ctx context.Context, tagID, parentTagIDOrName string) error {
+	_, err := c.CallAPI(ctx, "logseq.Editor.removeTagExtends", tagID, parentTagIDOrName)
+	return err
+}
+
+// AddBlockTag adds a tag to a block.
+func (c *Client) AddBlockTag(ctx context.Context, blockID, tagID string) error {
+	_, err := c.CallAPI(ctx, "logseq.Editor.addBlockTag", blockID, tagID)
+	return err
+}
+
+// RemoveBlockTag removes a tag from a block.
+func (c *Client) RemoveBlockTag(ctx context.Context, blockID, tagID string) error {
+	_, err := c.CallAPI(ctx, "logseq.Editor.removeBlockTag", blockID, tagID)
+	return err
+}
 
 // GetAllTags collects all tags in current graph.
 // Strategy:

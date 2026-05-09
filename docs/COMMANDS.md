@@ -28,6 +28,14 @@
 
 列出所有页面。
 
+### `logseq page current`
+
+获取当前焦点页面。
+
+### `logseq page current-tree`
+
+获取当前焦点页面的块树。
+
 ### `logseq page get <name>`
 
 获取页面信息。
@@ -51,6 +59,14 @@
 选项：
 
 - `-c, --content`（string）：初始块内容；传 `-` 时从 stdin 读取
+
+### `logseq page journal [date]`
+
+按日期创建 Journal 页面。
+
+参数：
+
+- `date`（string，可选）：日期字符串，格式 `YYYY-MM-DD`；不传则使用今天
 
 ### `logseq page delete <name>`
 
@@ -116,6 +132,38 @@
 
 - `-c, --children`（bool）：包含子块
 
+### `logseq block current`
+
+获取当前焦点块。
+
+### `logseq block selected`
+
+获取当前选中的块列表。
+
+### `logseq block clear-selected`
+
+清空当前选中块。
+
+### `logseq block new-uuid`
+
+生成新的块 UUID（`logseq.Editor.newBlockUUID`）。
+
+### `logseq block prev-sibling <uuid>`
+
+获取前一个同级块。
+
+参数：
+
+- `uuid`（string，必填）：块 UUID
+
+### `logseq block next-sibling <uuid>`
+
+获取后一个同级块。
+
+参数：
+
+- `uuid`（string，必填）：块 UUID
+
 ### `logseq block insert <target-uuid> <content>`
 
 向目标块插入新块。
@@ -128,6 +176,23 @@
 选项：
 
 - `-s, --sibling`（bool）：作为同级块插入（默认作为子块）
+
+### `logseq block insert-batch <target-uuid> <blocks-json>`
+
+批量插入块树。
+
+参数：
+
+- `target-uuid`（string，必填）：目标块 UUID
+- `blocks-json`（string，必填）：JSON 数组（传 `-` 时从 stdin 读取）
+
+选项：
+
+- `-s, --sibling`（bool）：作为同级块插入（默认作为子块）
+
+示例：
+
+- `echo '[{"content":"- item1"},{"content":"- item2"}]' | logseq block insert-batch <target-uuid> -`
 
 ### `logseq block update <uuid> <content>`
 
@@ -211,6 +276,51 @@
 
 获取用户配置（`logseq.App.getUserConfigs`）。
 
+### `logseq graph app-info`
+
+获取应用信息（`logseq.App.getInfo`）。
+
+### `logseq graph user-info`
+
+获取用户信息（`logseq.App.getUserInfo`）。
+
+### `logseq graph db-graph`
+
+检查当前图谱是否为 DB Graph（`logseq.App.checkCurrentIsDbGraph`）。
+
+### `logseq graph graph-config`
+
+获取当前图谱配置（`logseq.App.getCurrentGraphConfigs`）。
+
+### `logseq graph favorites`
+
+获取当前图谱收藏（`logseq.App.getCurrentGraphFavorites`）。
+
+### `logseq graph recent`
+
+获取当前图谱最近访问项（`logseq.App.getCurrentGraphRecent`）。
+
+### `logseq graph templates`
+
+获取当前图谱模板集合（`logseq.App.getCurrentGraphTemplates`）。
+
+### `logseq graph state <key>`
+
+获取应用状态存储中的键值（`logseq.App.getStateFromStore`）。
+
+参数：
+
+- `key`（string，必填）：状态键名
+
+### `logseq graph state-set <key> <value>`
+
+设置应用状态存储中的键值（`logseq.App.setStateFromStore`）。
+
+参数：
+
+- `key`（string，必填）：状态键名
+- `value`（string，必填）：状态值（优先按 JSON 字面量解析，失败则按字符串写入）
+
 ---
 
 ## query：查询
@@ -248,6 +358,99 @@
 ### `logseq tag list`
 
 列出当前图谱中的全部标签。
+
+### `logseq tag get <name-or-id>`
+
+按标签名或实体 id 获取标签信息。
+
+参数：
+
+- `name-or-id`（string，必填）：标签名或数字 id
+
+### `logseq tag search <name>`
+
+按名称搜索标签（`logseq.Editor.getTagsByName`）。
+
+参数：
+
+- `name`（string，必填）：标签名关键词
+
+### `logseq tag create <name>`
+
+创建标签（`logseq.Editor.createTag`）。
+
+参数：
+
+- `name`（string，必填）：标签名
+
+选项：
+
+- `--uuid`（string）：自定义标签页面 UUID
+
+### `logseq tag objects <name>`
+
+获取标签对象块（`logseq.Editor.getTagObjects`）。
+
+参数：
+
+- `name`（string，必填）：标签名
+
+### `logseq tag property add <tag-id> <property-id-or-name>`
+
+给标签添加属性关系。
+
+### `logseq tag property remove <tag-id> <property-id-or-name>`
+
+移除标签属性关系。
+
+### `logseq tag extends add <tag-id> <parent-tag-id-or-name>`
+
+给标签添加父标签关系。
+
+### `logseq tag extends remove <tag-id> <parent-tag-id-or-name>`
+
+移除标签父标签关系。
+
+### `logseq tag block add <block-id> <tag-id>`
+
+给块添加标签。
+
+### `logseq tag block remove <block-id> <tag-id>`
+
+从块移除标签。
+
+---
+
+## property：属性 schema 管理
+
+### `logseq property list`
+
+列出全部属性实体（`logseq.Editor.getAllProperties`）。
+
+### `logseq property get <key>`
+
+按 key 获取属性实体（`logseq.Editor.getProperty`）。
+
+参数：
+
+- `key`（string，必填）：属性 key
+
+### `logseq property upsert <key> [schema-json]`
+
+创建或更新属性 schema（`logseq.Editor.upsertProperty`）。
+
+参数：
+
+- `key`（string，必填）：属性 key
+- `schema-json`（string，可选）：JSON 对象，如 `'{"type":"number","cardinality":"one"}'`
+
+### `logseq property remove <key>`
+
+删除属性 schema（`logseq.Editor.removeProperty`）。
+
+参数：
+
+- `key`（string，必填）：属性 key
 
 ---
 

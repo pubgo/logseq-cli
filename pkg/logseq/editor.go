@@ -53,6 +53,22 @@ func (c *Client) CreatePage(ctx context.Context, name string, properties map[str
 	return &page, nil
 }
 
+// CreateJournalPage creates a journal page for a specific date string.
+func (c *Client) CreateJournalPage(ctx context.Context, date string) (*Page, error) {
+	raw, err := c.CallAPI(ctx, "logseq.Editor.createJournalPage", date)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+	var page Page
+	if err := json.Unmarshal(raw, &page); err != nil {
+		return nil, err
+	}
+	return &page, nil
+}
+
 // DeletePage deletes a page by name.
 func (c *Client) DeletePage(ctx context.Context, name string) error {
 	_, err := c.CallAPI(ctx, "logseq.Editor.deletePage", name)
@@ -159,6 +175,38 @@ func (c *Client) MoveBlock(ctx context.Context, srcUUID, targetUUID string, opts
 	return err
 }
 
+// GetPreviousSiblingBlock returns previous sibling block of given block.
+func (c *Client) GetPreviousSiblingBlock(ctx context.Context, uuid string) (*Block, error) {
+	raw, err := c.CallAPI(ctx, "logseq.Editor.getPreviousSiblingBlock", uuid)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+	var block Block
+	if err := json.Unmarshal(raw, &block); err != nil {
+		return nil, err
+	}
+	return &block, nil
+}
+
+// GetNextSiblingBlock returns next sibling block of given block.
+func (c *Client) GetNextSiblingBlock(ctx context.Context, uuid string) (*Block, error) {
+	raw, err := c.CallAPI(ctx, "logseq.Editor.getNextSiblingBlock", uuid)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+	var block Block
+	if err := json.Unmarshal(raw, &block); err != nil {
+		return nil, err
+	}
+	return &block, nil
+}
+
 // PrependBlockInPage inserts a block at the beginning of a page.
 func (c *Client) PrependBlockInPage(ctx context.Context, page, content string) (*Block, error) {
 	raw, err := c.CallAPI(ctx, "logseq.Editor.prependBlockInPage", page, content)
@@ -230,6 +278,32 @@ func (c *Client) GetCurrentPage(ctx context.Context) (*Page, error) {
 		return nil, err
 	}
 	return &page, nil
+}
+
+// GetSelectedBlocks returns currently selected blocks.
+func (c *Client) GetSelectedBlocks(ctx context.Context) ([]Block, error) {
+	return decode[[]Block](c.CallAPI(ctx, "logseq.Editor.getSelectedBlocks"))
+}
+
+// ClearSelectedBlocks clears current selected blocks.
+func (c *Client) ClearSelectedBlocks(ctx context.Context) error {
+	_, err := c.CallAPI(ctx, "logseq.Editor.clearSelectedBlocks")
+	return err
+}
+
+// NewBlockUUID creates a unique UUID string.
+func (c *Client) NewBlockUUID(ctx context.Context) (string, error) {
+	return decode[string](c.CallAPI(ctx, "logseq.Editor.newBlockUUID"))
+}
+
+// GetCurrentPageBlocksTree returns block tree of currently focused page.
+func (c *Client) GetCurrentPageBlocksTree(ctx context.Context) ([]Block, error) {
+	return decode[[]Block](c.CallAPI(ctx, "logseq.Editor.getCurrentPageBlocksTree"))
+}
+
+// GetPageProperties returns properties of a page directly.
+func (c *Client) GetPageProperties(ctx context.Context, page string) (map[string]any, error) {
+	return decode[map[string]any](c.CallAPI(ctx, "logseq.Editor.getPageProperties", page))
 }
 
 // GetCurrentBlock returns the currently focused block.

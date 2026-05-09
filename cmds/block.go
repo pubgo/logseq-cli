@@ -14,8 +14,15 @@ func BlockCmd() *redant.Command {
 		Use:   "block",
 		Short: "Block management",
 		Children: []*redant.Command{
+			blockCurrentCmd(),
+			blockSelectedCmd(),
+			blockClearSelectedCmd(),
+			blockNewUUIDCmd(),
 			blockGetCmd(),
+			blockPrevSiblingCmd(),
+			blockNextSiblingCmd(),
 			blockInsertCmd(),
+			blockInsertBatchCmd(),
 			blockUpdateCmd(),
 			blockRemoveCmd(),
 			blockMoveCmd(),
@@ -24,6 +31,64 @@ func BlockCmd() *redant.Command {
 			blockPropertyCmd(),
 			blockCollapseCmd(),
 		},
+	}
+}
+
+func blockSelectedCmd() *redant.Command {
+	return &redant.Command{
+		Use:   "selected",
+		Short: "Get currently selected blocks",
+		ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) ([]logseq.Block, error) {
+			client := NewClient()
+			return client.GetSelectedBlocks(ctx)
+		}),
+	}
+}
+
+func blockClearSelectedCmd() *redant.Command {
+	return &redant.Command{
+		Use:   "clear-selected",
+		Short: "Clear currently selected blocks",
+		ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) (StatusResult, error) {
+			client := NewClient()
+			if err := client.ClearSelectedBlocks(ctx); err != nil {
+				return StatusResult{}, err
+			}
+			return StatusResult{OK: true, Message: "selection cleared"}, nil
+		}),
+	}
+}
+
+func blockNewUUIDCmd() *redant.Command {
+	return &redant.Command{
+		Use:   "new-uuid",
+		Short: "Create a new block UUID",
+		ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) (map[string]string, error) {
+			client := NewClient()
+			uuid, err := client.NewBlockUUID(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]string{"uuid": uuid}, nil
+		}),
+	}
+}
+
+func blockCurrentCmd() *redant.Command {
+	return &redant.Command{
+		Use:   "current",
+		Short: "Get currently focused block",
+		ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) (*logseq.Block, error) {
+			client := NewClient()
+			block, err := client.GetCurrentBlock(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if block == nil {
+				return nil, fmt.Errorf("no current block")
+			}
+			return block, nil
+		}),
 	}
 }
 
@@ -57,6 +122,48 @@ func blockGetCmd() *redant.Command {
 	}
 }
 
+func blockPrevSiblingCmd() *redant.Command {
+	return &redant.Command{
+		Use:   "prev-sibling <uuid>",
+		Short: "Get previous sibling block",
+		Args: redant.ArgSet{
+			{Name: "uuid", Required: true, Value: redant.StringOf(new(string)), Description: "Block UUID"},
+		},
+		ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) (*logseq.Block, error) {
+			client := NewClient()
+			block, err := client.GetPreviousSiblingBlock(ctx, inv.Args[0])
+			if err != nil {
+				return nil, err
+			}
+			if block == nil {
+				return nil, fmt.Errorf("previous sibling not found for block '%s'", inv.Args[0])
+			}
+			return block, nil
+		}),
+	}
+}
+
+func blockNextSiblingCmd() *redant.Command {
+	return &redant.Command{
+		Use:   "next-sibling <uuid>",
+		Short: "Get next sibling block",
+		Args: redant.ArgSet{
+			{Name: "uuid", Required: true, Value: redant.StringOf(new(string)), Description: "Block UUID"},
+		},
+		ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) (*logseq.Block, error) {
+			client := NewClient()
+			block, err := client.GetNextSiblingBlock(ctx, inv.Args[0])
+			if err != nil {
+				return nil, err
+			}
+			if block == nil {
+				return nil, fmt.Errorf("next sibling not found for block '%s'", inv.Args[0])
+			}
+			return block, nil
+		}),
+	}
+}
+
 func blockInsertCmd() *redant.Command {
 	var sibling bool
 	return &redant.Command{
@@ -83,6 +190,47 @@ func blockInsertCmd() *redant.Command {
 			return client.InsertBlock(ctx, inv.Args[0], content, &logseq.InsertBlockOptions{
 				Sibling: sibling,
 			})
+		}),
+	}
+}
+
+func blockInsertBatchCmd() *redant.Command {
+	var sibling bool
+	return &redant.Command{
+		Use:   "insert-batch <target-uuid> <blocks-json>",
+		Short: "Insert multiple blocks (JSON array, use '-' to read from stdin)",
+		Args: redant.ArgSet{
+			{Name: "target-uuid", Required: true, Value: redant.StringOf(new(string)), Description: "Target block UUID"},
+			{Name: "blocks-json", Required: true, Value: redant.StringOf(new(string)), Description: "JSON array of batch blocks (use '-' for stdin)"},
+		},
+		Options: redant.OptionSet{
+			{
+				Flag:        "sibling",
+				Shorthand:   "s",
+				Description: "Insert as sibling (default: child)",
+				Value:       redant.BoolOf(&sibling),
+			},
+		},
+		ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) (StatusResult, error) {
+			raw, err := readContent(inv, inv.Args[1])
+			if err != nil {
+				return StatusResult{}, err
+			}
+
+			var blocks []logseq.BatchBlock
+			if err := json.Unmarshal([]byte(raw), &blocks); err != nil {
+				return StatusResult{}, fmt.Errorf("invalid blocks json, expected []BatchBlock: %w", err)
+			}
+			if len(blocks) == 0 {
+				return StatusResult{}, fmt.Errorf("blocks array cannot be empty")
+			}
+
+			client := NewClient()
+			if err := client.InsertBatchBlock(ctx, inv.Args[0], blocks, sibling); err != nil {
+				return StatusResult{}, err
+			}
+
+			return StatusResult{OK: true, Message: fmt.Sprintf("inserted %d blocks", len(blocks))}, nil
 		}),
 	}
 }
