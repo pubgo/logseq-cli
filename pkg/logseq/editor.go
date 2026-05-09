@@ -3,6 +3,7 @@ package logseq
 import (
 	"context"
 	"encoding/json"
+	"strings"
 )
 
 // === Page Operations ===
@@ -54,9 +55,13 @@ func (c *Client) CreatePage(ctx context.Context, name string, properties map[str
 }
 
 // CreateJournalPage creates a journal page for a specific date string.
+// Falls back to CreatePage with journal option if the native API is unavailable.
 func (c *Client) CreateJournalPage(ctx context.Context, date string) (*Page, error) {
 	raw, err := c.CallAPI(ctx, "logseq.Editor.createJournalPage", date)
 	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "methodnotexist") {
+			return c.CreatePage(ctx, date, nil, &CreatePageOptions{Journal: true})
+		}
 		return nil, err
 	}
 	if len(raw) == 0 || string(raw) == "null" {

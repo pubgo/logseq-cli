@@ -83,6 +83,7 @@ type InsertBlockOptions struct {
 // CreatePageOptions configures createPage behavior.
 type CreatePageOptions struct {
 	CreateFirstBlock bool `json:"createFirstBlock,omitempty"`
+	Journal          bool `json:"journal,omitempty"`
 }
 
 // SearchResult represents a search result from logseq.App.search.

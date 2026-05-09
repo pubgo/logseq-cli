@@ -3,6 +3,7 @@ package logseq
 import (
 	"context"
 	"encoding/json"
+	"strings"
 )
 
 // GetCurrentGraph returns metadata about the current graph.
@@ -27,8 +28,13 @@ func (c *Client) GetUserConfigs(ctx context.Context) (map[string]any, error) {
 }
 
 // GetInfo returns application information.
+// Falls back to GetUserConfigs if the native API is unavailable.
 func (c *Client) GetInfo(ctx context.Context) (map[string]any, error) {
-	return decode[map[string]any](c.CallAPI(ctx, "logseq.App.getInfo"))
+	result, err := decode[map[string]any](c.CallAPI(ctx, "logseq.App.getInfo"))
+	if err != nil && strings.Contains(strings.ToLower(err.Error()), "methodnotexist") {
+		return c.GetUserConfigs(ctx)
+	}
+	return result, err
 }
 
 // GetUserInfo returns current user information.

@@ -55,8 +55,28 @@ func (c *Client) GetTag(ctx context.Context, nameOrIdent string) (*Page, error) 
 }
 
 // GetTagsByName gets tags by fuzzy/equal name in Logseq.
+// Falls back to GetAllTags + local filtering if the native API is unavailable.
 func (c *Client) GetTagsByName(ctx context.Context, tagName string) ([]Page, error) {
-	return decode[[]Page](c.CallAPI(ctx, "logseq.Editor.getTagsByName", tagName))
+	result, err := decode[[]Page](c.CallAPI(ctx, "logseq.Editor.getTagsByName", tagName))
+	if err != nil && strings.Contains(strings.ToLower(err.Error()), "methodnotexist") {
+		return c.getTagsByNameFallback(ctx, tagName)
+	}
+	return result, err
+}
+
+func (c *Client) getTagsByNameFallback(ctx context.Context, tagName string) ([]Page, error) {
+	allTags, err := c.GetAllTags(ctx)
+	if err != nil {
+		return nil, err
+	}
+	needle := strings.ToLower(tagName)
+	var pages []Page
+	for _, t := range allTags {
+		if strings.Contains(strings.ToLower(t), needle) {
+			pages = append(pages, Page{Name: t, OriginalName: t})
+		}
+	}
+	return pages, nil
 }
 
 // GetTagObjects gets tag object blocks for the given tag name.
