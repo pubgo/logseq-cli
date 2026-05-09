@@ -36,14 +36,39 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/connection", s.handleConnection)
 	mux.HandleFunc("/api/graph", s.handleGraph)
 	mux.HandleFunc("/api/graph/config", s.handleGraphConfig)
+	mux.HandleFunc("/api/graph/app-info", s.handleGraphAppInfo)
+	mux.HandleFunc("/api/graph/user-info", s.handleGraphUserInfo)
+	mux.HandleFunc("/api/graph/current-config", s.handleGraphCurrentConfig)
+	mux.HandleFunc("/api/graph/favorites", s.handleGraphFavorites)
+	mux.HandleFunc("/api/graph/recent", s.handleGraphRecent)
+	mux.HandleFunc("/api/graph/templates", s.handleGraphTemplates)
+	mux.HandleFunc("/api/graph/state", s.handleGraphState)
 	mux.HandleFunc("/api/pages", s.handlePages)
 	mux.HandleFunc("/api/pages/filter", s.handlePagesFilter)
 	mux.HandleFunc("/api/tags", s.handleTags)
+	mux.HandleFunc("/api/tag", s.handleTagGet)
+	mux.HandleFunc("/api/tag/search", s.handleTagSearch)
+	mux.HandleFunc("/api/tag/create", s.handleTagCreate)
+	mux.HandleFunc("/api/tag/objects", s.handleTagObjects)
+	mux.HandleFunc("/api/tag/property", s.handleTagPropertyRelation)
+	mux.HandleFunc("/api/tag/extends", s.handleTagExtendsRelation)
+	mux.HandleFunc("/api/tag/block", s.handleTagBlockRelation)
+	mux.HandleFunc("/api/property/list", s.handlePropertyList)
+	mux.HandleFunc("/api/property", s.handlePropertyGet)
+	mux.HandleFunc("/api/property/upsert", s.handlePropertyUpsert)
+	mux.HandleFunc("/api/property/remove", s.handlePropertyRemove)
 	mux.HandleFunc("/api/page", s.handlePage)
+	mux.HandleFunc("/api/page/journal", s.handlePageJournal)
 	mux.HandleFunc("/api/page/rename", s.handlePageRename)
 	mux.HandleFunc("/api/page/refs", s.handlePageRefs)
 	mux.HandleFunc("/api/page/namespace", s.handlePageNamespace)
 	mux.HandleFunc("/api/page/properties", s.handlePageProperties)
+	mux.HandleFunc("/api/block/current", s.handleBlockCurrent)
+	mux.HandleFunc("/api/block/selected", s.handleBlockSelected)
+	mux.HandleFunc("/api/block/selected/clear", s.handleBlockClearSelected)
+	mux.HandleFunc("/api/block/new-uuid", s.handleBlockNewUUID)
+	mux.HandleFunc("/api/block/prev-sibling", s.handleBlockPrevSibling)
+	mux.HandleFunc("/api/block/next-sibling", s.handleBlockNextSibling)
 	mux.HandleFunc("/api/block", s.handleBlockGet)
 	mux.HandleFunc("/api/block/insert", s.handleBlockInsert)
 	mux.HandleFunc("/api/block/append", s.handleBlockAppend)
@@ -131,6 +156,156 @@ func (s *Server) handleGraphConfig(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, config)
 }
 
+func (s *Server) handleGraphAppInfo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	info, err := s.client.GetInfo(ctx)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, info)
+}
+
+func (s *Server) handleGraphUserInfo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	info, err := s.client.GetUserInfo(ctx)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, info)
+}
+
+func (s *Server) handleGraphCurrentConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	config, err := s.client.GetCurrentGraphConfigs(ctx)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, config)
+}
+
+func (s *Server) handleGraphFavorites(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	items, err := s.client.GetCurrentGraphFavorites(ctx)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, items)
+}
+
+func (s *Server) handleGraphRecent(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	items, err := s.client.GetCurrentGraphRecent(ctx)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, items)
+}
+
+func (s *Server) handleGraphTemplates(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	items, err := s.client.GetCurrentGraphTemplates(ctx)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, items)
+}
+
+type graphStateSetRequest struct {
+	Key   string `json:"key"`
+	Value any    `json:"value"`
+}
+
+func (s *Server) handleGraphState(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		key := strings.TrimSpace(r.URL.Query().Get("key"))
+		if key == "" {
+			writeError(w, http.StatusBadRequest, "missing query: key")
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+
+		value, err := s.client.GetStateFromStore(ctx, key)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		writeOK(w, value)
+	case http.MethodPost:
+		var req graphStateSetRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid json body")
+			return
+		}
+		req.Key = strings.TrimSpace(req.Key)
+		if req.Key == "" {
+			writeError(w, http.StatusBadRequest, "key is required")
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+
+		if err := s.client.SetStateFromStore(ctx, req.Key, req.Value); err != nil {
+			writeError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		writeOK(w, map[string]any{"message": "state updated", "key": req.Key})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
 func (s *Server) handlePages(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -207,6 +382,342 @@ func (s *Server) handleTags(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeOK(w, tags)
+}
+
+func (s *Server) handleTagGet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	nameOrID := strings.TrimSpace(r.URL.Query().Get("nameOrID"))
+	if nameOrID == "" {
+		writeError(w, http.StatusBadRequest, "missing query: nameOrID")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	tag, err := s.client.GetTag(ctx, nameOrID)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if tag == nil {
+		writeError(w, http.StatusNotFound, "tag not found")
+		return
+	}
+	writeOK(w, tag)
+}
+
+func (s *Server) handleTagSearch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	name := strings.TrimSpace(r.URL.Query().Get("name"))
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "missing query: name")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	tags, err := s.client.GetTagsByName(ctx, name)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, tags)
+}
+
+type createTagRequest struct {
+	Name string `json:"name"`
+	UUID string `json:"uuid"`
+}
+
+func (s *Server) handleTagCreate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req createTagRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	req.UUID = strings.TrimSpace(req.UUID)
+	if req.Name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	var (
+		tag *logseq.Page
+		err error
+	)
+	if req.UUID != "" {
+		tag, err = s.client.CreateTag(ctx, req.Name, req.UUID)
+	} else {
+		tag, err = s.client.CreateTag(ctx, req.Name)
+	}
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, tag)
+}
+
+func (s *Server) handleTagObjects(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	name := strings.TrimSpace(r.URL.Query().Get("name"))
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "missing query: name")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	items, err := s.client.GetTagObjects(ctx, name)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, items)
+}
+
+type tagRelationRequest struct {
+	Action string `json:"action"`
+	TagID  string `json:"tagID"`
+	Target string `json:"target"`
+}
+
+func (s *Server) handleTagPropertyRelation(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req tagRelationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	req.Action = strings.ToLower(strings.TrimSpace(req.Action))
+	req.TagID = strings.TrimSpace(req.TagID)
+	req.Target = strings.TrimSpace(req.Target)
+	if req.TagID == "" || req.Target == "" {
+		writeError(w, http.StatusBadRequest, "tagID and target are required")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	var err error
+	if req.Action == "remove" {
+		err = s.client.RemoveTagProperty(ctx, req.TagID, req.Target)
+	} else {
+		err = s.client.AddTagProperty(ctx, req.TagID, req.Target)
+	}
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, map[string]any{"message": "tag property relation updated"})
+}
+
+func (s *Server) handleTagExtendsRelation(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req tagRelationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	req.Action = strings.ToLower(strings.TrimSpace(req.Action))
+	req.TagID = strings.TrimSpace(req.TagID)
+	req.Target = strings.TrimSpace(req.Target)
+	if req.TagID == "" || req.Target == "" {
+		writeError(w, http.StatusBadRequest, "tagID and target are required")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	var err error
+	if req.Action == "remove" {
+		err = s.client.RemoveTagExtends(ctx, req.TagID, req.Target)
+	} else {
+		err = s.client.AddTagExtends(ctx, req.TagID, req.Target)
+	}
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, map[string]any{"message": "tag extends relation updated"})
+}
+
+type tagBlockRelationRequest struct {
+	Action  string `json:"action"`
+	BlockID string `json:"blockID"`
+	TagID   string `json:"tagID"`
+}
+
+func (s *Server) handleTagBlockRelation(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req tagBlockRelationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	req.Action = strings.ToLower(strings.TrimSpace(req.Action))
+	req.BlockID = strings.TrimSpace(req.BlockID)
+	req.TagID = strings.TrimSpace(req.TagID)
+	if req.BlockID == "" || req.TagID == "" {
+		writeError(w, http.StatusBadRequest, "blockID and tagID are required")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	var err error
+	if req.Action == "remove" {
+		err = s.client.RemoveBlockTag(ctx, req.BlockID, req.TagID)
+	} else {
+		err = s.client.AddBlockTag(ctx, req.BlockID, req.TagID)
+	}
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, map[string]any{"message": "block tag relation updated"})
+}
+
+func (s *Server) handlePropertyList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	items, err := s.client.GetAllProperties(ctx)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, items)
+}
+
+func (s *Server) handlePropertyGet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	key := strings.TrimSpace(r.URL.Query().Get("key"))
+	if key == "" {
+		writeError(w, http.StatusBadRequest, "missing query: key")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	item, err := s.client.GetProperty(ctx, key)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, item)
+}
+
+type propertyUpsertRequest struct {
+	Key    string         `json:"key"`
+	Schema map[string]any `json:"schema"`
+}
+
+func (s *Server) handlePropertyUpsert(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req propertyUpsertRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	req.Key = strings.TrimSpace(req.Key)
+	if req.Key == "" {
+		writeError(w, http.StatusBadRequest, "key is required")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	result, err := s.client.UpsertProperty(ctx, req.Key, req.Schema, nil)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, result)
+}
+
+type propertyRemoveRequest struct {
+	Key string `json:"key"`
+}
+
+func (s *Server) handlePropertyRemove(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req propertyRemoveRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	req.Key = strings.TrimSpace(req.Key)
+	if req.Key == "" {
+		writeError(w, http.StatusBadRequest, "key is required")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	if err := s.client.RemoveProperty(ctx, req.Key); err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, map[string]any{"message": "property removed", "key": req.Key})
 }
 
 func (s *Server) getAllPages(ctx context.Context) ([]logseq.Page, error) {
@@ -514,7 +1025,12 @@ func parseBoolOrDefault(raw string, def bool) bool {
 }
 
 type createPageRequest struct {
-	Name string `json:"name"`
+	Name    string `json:"name"`
+	Content string `json:"content"`
+}
+
+type createJournalRequest struct {
+	Date string `json:"date"`
 }
 
 func (s *Server) handlePage(w http.ResponseWriter, r *http.Request) {
@@ -578,6 +1094,41 @@ func (s *Server) handlePageCreate(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	page, err := s.client.CreatePage(ctx, name, nil, &logseq.CreatePageOptions{CreateFirstBlock: true})
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	content := strings.TrimSpace(req.Content)
+	if content != "" {
+		if _, err := s.client.AppendBlockInPage(ctx, name, content); err != nil {
+			writeError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+	}
+	writeOK(w, page)
+}
+
+func (s *Server) handlePageJournal(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req createJournalRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	date := strings.TrimSpace(req.Date)
+	if date == "" {
+		date = time.Now().Format("2006-01-02")
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	page, err := s.client.CreateJournalPage(ctx, date)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
@@ -1020,6 +1571,129 @@ func (s *Server) handlePageProperties(w http.ResponseWriter, r *http.Request) {
 }
 
 // === Block: get ===
+
+func (s *Server) handleBlockCurrent(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	block, err := s.client.GetCurrentBlock(ctx)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if block == nil {
+		writeError(w, http.StatusNotFound, "no current block")
+		return
+	}
+	writeOK(w, block)
+}
+
+func (s *Server) handleBlockSelected(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	blocks, err := s.client.GetSelectedBlocks(ctx)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, blocks)
+}
+
+func (s *Server) handleBlockClearSelected(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	if err := s.client.ClearSelectedBlocks(ctx); err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, map[string]any{"message": "selection cleared"})
+}
+
+func (s *Server) handleBlockNewUUID(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	uuid, err := s.client.NewBlockUUID(ctx)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeOK(w, map[string]any{"uuid": uuid})
+}
+
+func (s *Server) handleBlockPrevSibling(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	uuid := strings.TrimSpace(r.URL.Query().Get("uuid"))
+	if uuid == "" {
+		writeError(w, http.StatusBadRequest, "missing query: uuid")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	block, err := s.client.GetPreviousSiblingBlock(ctx, uuid)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if block == nil {
+		writeError(w, http.StatusNotFound, "previous sibling not found")
+		return
+	}
+	writeOK(w, block)
+}
+
+func (s *Server) handleBlockNextSibling(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	uuid := strings.TrimSpace(r.URL.Query().Get("uuid"))
+	if uuid == "" {
+		writeError(w, http.StatusBadRequest, "missing query: uuid")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	block, err := s.client.GetNextSiblingBlock(ctx, uuid)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if block == nil {
+		writeError(w, http.StatusNotFound, "next sibling not found")
+		return
+	}
+	writeOK(w, block)
+}
 
 func (s *Server) handleBlockGet(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {

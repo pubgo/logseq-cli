@@ -256,6 +256,17 @@
                 placeholder="页面初始内容（Markdown）"></textarea>
             </div>
 
+            <!-- Journal create -->
+            <div class="border-t border-slate-800 pt-3 space-y-2">
+              <span class="text-xs text-slate-400">创建 Journal 页面（可选日期，格式 YYYY-MM-DD）</span>
+              <div class="flex gap-2 text-sm">
+                <input x-model="journalDate" class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                  placeholder="留空=今天" />
+                <button class="px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600 text-sm"
+                  @click="createJournalPage()">创建 Journal</button>
+              </div>
+            </div>
+
             <!-- Rename -->
             <div class="border-t border-slate-800 pt-3 space-y-2">
               <span class="text-xs text-slate-400">重命名</span>
@@ -472,6 +483,25 @@
           </template>
         </div>
 
+        <!-- Block utils -->
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <span class="font-semibold text-sm">块快捷操作</span>
+          <div class="flex flex-wrap gap-2 text-sm">
+            <button class="px-3 py-1.5 rounded bg-blue-700 hover:bg-blue-600" @click="getCurrentBlock()">当前焦点块</button>
+            <button class="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600"
+              @click="getSelectedBlocks()">当前选中块</button>
+            <button class="px-3 py-1.5 rounded bg-rose-700 hover:bg-rose-600"
+              @click="clearSelectedBlocks()">清空选中</button>
+            <button class="px-3 py-1.5 rounded bg-teal-700 hover:bg-teal-600" @click="newBlockUUID()">生成 UUID</button>
+          </div>
+          <div class="flex gap-2 text-sm">
+            <input x-model="block.siblingUUID" class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700"
+              placeholder="块 UUID（查询前后兄弟）" />
+            <button class="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600" @click="getPrevSibling()">前兄弟</button>
+            <button class="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600" @click="getNextSibling()">后兄弟</button>
+          </div>
+        </div>
+
         <!-- Insert block -->
         <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
           <span class="font-semibold text-sm">插入块</span>
@@ -664,6 +694,98 @@
               </div>
             </template>
           </div>
+
+          <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-4">
+            <span class="font-semibold text-sm">标签 / 属性增强操作</span>
+
+            <div class="space-y-2 border-b border-slate-800 pb-3">
+              <div class="text-xs text-slate-400">标签创建 / 查询 / 对象</div>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+                <input x-model="tagOps.createName" class="px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                  placeholder="新标签名" />
+                <input x-model="tagOps.createUUID" class="px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                  placeholder="可选 UUID" />
+                <button class="px-3 py-2 rounded bg-emerald-700 hover:bg-emerald-600"
+                  @click="createTagAdvanced()">创建标签</button>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm">
+                <input x-model="tagOps.queryNameOrID"
+                  class="md:col-span-2 px-3 py-2 rounded bg-slate-950 border border-slate-700" placeholder="标签名或实体ID" />
+                <button class="px-3 py-2 rounded bg-blue-700 hover:bg-blue-600" @click="tagGet()">获取标签</button>
+                <button class="px-3 py-2 rounded bg-blue-700 hover:bg-blue-600" @click="tagSearch()">搜索标签</button>
+              </div>
+              <div class="flex gap-2 text-sm">
+                <button class="px-3 py-2 rounded bg-indigo-700 hover:bg-indigo-600"
+                  @click="tagObjects()">获取标签对象块</button>
+              </div>
+            </div>
+
+            <div class="space-y-2 border-b border-slate-800 pb-3">
+              <div class="text-xs text-slate-400">标签关系操作（property / extends）</div>
+              <div class="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm">
+                <select x-model="tagOps.relationAction" class="px-3 py-2 rounded bg-slate-950 border border-slate-700">
+                  <option value="add">add</option>
+                  <option value="remove">remove</option>
+                </select>
+                <input x-model="tagOps.relationTagID" class="px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                  placeholder="tag-id" />
+                <input x-model="tagOps.relationTarget" class="px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                  placeholder="target (property/parent-tag)" />
+                <div class="flex gap-2">
+                  <button class="flex-1 px-2 py-2 rounded bg-teal-700 hover:bg-teal-600"
+                    @click="tagPropertyRelation()">property</button>
+                  <button class="flex-1 px-2 py-2 rounded bg-teal-700 hover:bg-teal-600"
+                    @click="tagExtendsRelation()">extends</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="space-y-2 border-b border-slate-800 pb-3">
+              <div class="text-xs text-slate-400">块标签关系（block-tag）</div>
+              <div class="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm">
+                <select x-model="tagOps.blockAction" class="px-3 py-2 rounded bg-slate-950 border border-slate-700">
+                  <option value="add">add</option>
+                  <option value="remove">remove</option>
+                </select>
+                <input x-model="tagOps.blockID" class="px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                  placeholder="block-id" />
+                <input x-model="tagOps.blockTagID" class="px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                  placeholder="tag-id" />
+                <button class="px-3 py-2 rounded bg-amber-700 hover:bg-amber-600"
+                  @click="tagBlockRelation()">执行</button>
+              </div>
+            </div>
+
+            <div class="space-y-2">
+              <div class="text-xs text-slate-400">属性 schema（property）</div>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+                <input x-model="propertyOps.key" class="px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                  placeholder="属性 key" />
+                <button class="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600" @click="propertyList()">列出全部</button>
+                <button class="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600" @click="propertyGet()">查询 key</button>
+              </div>
+              <div class="flex gap-2 text-sm">
+                <select x-model="selectedPropertySchemaPreset"
+                  class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700">
+                  <option value="">选择属性模板</option>
+                  <template x-for="p in propertySchemaPresets" :key="p.key">
+                    <option :value="p.key" x-text="p.key + ' · ' + p.label"></option>
+                  </template>
+                </select>
+                <button class="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600"
+                  @click="applyPropertySchemaPreset()">填充模板</button>
+              </div>
+              <textarea x-model="propertyOps.schemaText" rows="2"
+                class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm font-mono"
+                placeholder='schema json, 例如: {"type":"default","cardinality":"one","public":true}'></textarea>
+              <div class="flex gap-2 text-sm">
+                <button class="px-3 py-2 rounded bg-emerald-700 hover:bg-emerald-600"
+                  @click="propertyUpsert()">upsert</button>
+                <button class="px-3 py-2 rounded bg-rose-700 hover:bg-rose-600"
+                  @click="propertyRemove()">remove</button>
+              </div>
+            </div>
+          </div>
         </div>
 
       </div>
@@ -736,6 +858,52 @@
             <pre class="text-xs bg-slate-950 border border-slate-800 rounded p-3 overflow-auto"
               x-text="'baseURL : '+conn.baseURL+'\nhost    : '+conn.host+' ('+conn.hostSource+')\nport    : '+conn.port+' ('+conn.portSource+')\ntoken   : '+(conn.tokenConfigured?'已配置':'未配置')+' ('+conn.tokenSource+')'"></pre>
           </template>
+        </div>
+
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <span class="font-semibold text-sm">Graph 增强能力</span>
+          <div class="flex flex-wrap gap-2">
+            <button class="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-sm" @click="runGraphAppInfo()">App
+              Info</button>
+            <button class="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-sm"
+              @click="runGraphUserInfo()">User Info</button>
+            <button class="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-sm"
+              @click="runGraphCurrentConfig()">Graph Config</button>
+            <button class="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-sm"
+              @click="runGraphFavorites()">Favorites</button>
+            <button class="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-sm"
+              @click="runGraphRecent()">Recent</button>
+            <button class="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-sm"
+              @click="runGraphTemplates()">Templates</button>
+            <button class="px-3 py-1.5 rounded bg-amber-700 hover:bg-amber-600 text-sm"
+              @click="runQuickSmoke()">一键轻量验证</button>
+          </div>
+          <div class="border-t border-slate-800 pt-3 space-y-2">
+            <div class="text-xs text-slate-400">State 读写</div>
+            <div class="flex gap-2">
+              <select x-model="selectedStatePreset"
+                class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm">
+                <option value="">选择常用 state key</option>
+                <template x-for="k in stateKeyPresets" :key="k">
+                  <option :value="k" x-text="k"></option>
+                </template>
+              </select>
+              <button class="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600 text-sm"
+                @click="applyStatePreset()">填充</button>
+            </div>
+            <input x-model="graphState.key"
+              class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm"
+              placeholder="state key，例如 ui/sidebar-open?" />
+            <input x-model="graphState.value"
+              class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm"
+              placeholder="state value（JSON 或字符串）" />
+            <div class="flex gap-2">
+              <button class="px-3 py-1.5 rounded bg-teal-700 hover:bg-teal-600 text-sm"
+                @click="runGraphStateGet()">读取</button>
+              <button class="px-3 py-1.5 rounded bg-teal-700 hover:bg-teal-600 text-sm"
+                @click="runGraphStateSet()">写入</button>
+            </div>
+          </div>
         </div>
 
         <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
@@ -974,6 +1142,7 @@
         searchResults: [],
         showCreateWithContent: false,
         createPageContent: '',
+        journalDate: '',
         autoRefreshBlocks: true,
         queryHistory: [],
         tagList: [],
@@ -992,9 +1161,32 @@
           moveSrc: '', moveTarget: '', moveBefore: false,
           propUUID: '', propKey: '', propValue: '',
           collapseUUID: '',
+          siblingUUID: '',
         },
         searchQ: '', searchTag: '',
         tagFilter: '', tagListAll: [], tagListFiltered: [], selectedTag: '', tagPages: [],
+        graphState: { key: '', value: '' },
+        selectedStatePreset: '',
+        stateKeyPresets: [
+          'ui/sidebar-open?',
+          'ui/right-sidebar-open?',
+          'document/mode?',
+          'editor/editing?',
+          'ui/theme',
+        ],
+        tagOps: {
+          createName: '', createUUID: '', queryNameOrID: '',
+          relationAction: 'add', relationTagID: '', relationTarget: '',
+          blockAction: 'add', blockID: '', blockTagID: '',
+        },
+        propertyOps: { key: '', schemaText: '' },
+        selectedPropertySchemaPreset: '',
+        propertySchemaPresets: [
+          { key: 'status', label: '状态字符串', schema: { type: 'default', cardinality: 'one', public: true } },
+          { key: 'priority', label: '优先级字符串', schema: { type: 'default', cardinality: 'one', public: true } },
+          { key: 'estimate', label: '数值', schema: { type: 'number', cardinality: 'one', public: true } },
+          { key: 'tags', label: '多值标签', schema: { type: 'default', cardinality: 'many', public: true } },
+        ],
         queryText: '',
         selectedExample: 'page-all',
         exampleDesc: '',
@@ -1123,6 +1315,44 @@
           this.block.propUUID = uuid;
           this.block.collapseUUID = uuid;
           this.showToast('UUID 已填入块操作区');
+        },
+        applyStatePreset() {
+          if (!this.selectedStatePreset) return;
+          this.graphState.key = this.selectedStatePreset;
+          this.showToast('已填充 state key: ' + this.selectedStatePreset);
+        },
+        applyPropertySchemaPreset() {
+          if (!this.selectedPropertySchemaPreset) return;
+          const preset = this.propertySchemaPresets.find(p => p.key === this.selectedPropertySchemaPreset);
+          if (!preset) return;
+          this.propertyOps.key = preset.key;
+          this.propertyOps.schemaText = JSON.stringify(preset.schema, null, 2);
+          this.showToast('已填充属性模板: ' + preset.key);
+        },
+        async runQuickSmoke() {
+          const req = { method: 'CUSTOM', url: '/api/quick-smoke' };
+          await this.run('一键轻量验证', req, async () => {
+            const summary = { ok: true, checks: [] };
+            const checks = [
+              ['health', '/api/health'],
+              ['graph', '/api/graph'],
+              ['graph-config', '/api/graph/config'],
+              ['tags', '/api/tags'],
+              ['properties', '/api/property/list'],
+            ];
+
+            for (const [name, url] of checks) {
+              try {
+                const data = await this.api(url);
+                const count = Array.isArray(data) ? data.length : undefined;
+                summary.checks.push({ name, ok: true, count });
+              } catch (e) {
+                summary.ok = false;
+                summary.checks.push({ name, ok: false, error: e.message });
+              }
+            }
+            return summary;
+          });
         },
         addHistory(action, req, ok, result) {
           this.history.unshift({ time: this.now(), action, req, ok, result });
@@ -1268,6 +1498,16 @@
           if (d) { this.currentPage = this.newPageName; this.newPageName = ''; this.createPageContent = ''; this.showCreateWithContent = false; this.refreshPages(false); }
         },
 
+        async createJournalPage() {
+          const req = { method: 'POST', url: '/api/page/journal', body: JSON.stringify({ date: this.journalDate }) };
+          const d = await this.run('创建 Journal', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+          if (d) {
+            this.currentPage = d.originalName || d.name || this.currentPage;
+            this.refreshPages(false);
+            if (this.currentPage) this.loadPage();
+          }
+        },
+
         async deletePage() {
           if (!this.currentPage || !confirm('确认删除: ' + this.currentPage + ' ?')) return;
           const req = { method: 'DELETE', url: '/api/page?name=' + encodeURIComponent(this.currentPage) };
@@ -1336,6 +1576,51 @@
           if (d) {
             this.blockPreview = { uuid: d.uuid || this.block.getUUID, content: d.content || d['block/content'] || '' };
           }
+        },
+
+        async getCurrentBlock() {
+          const req = { method: 'GET', url: '/api/block/current' };
+          const d = await this.run('当前焦点块', req, () => this.api(req.url));
+          if (d?.uuid) {
+            this.fillBlockUUID(d.uuid);
+            this.block.getUUID = d.uuid;
+          }
+        },
+
+        async getSelectedBlocks() {
+          const req = { method: 'GET', url: '/api/block/selected' };
+          const d = await this.run('当前选中块', req, () => this.api(req.url));
+          if (Array.isArray(d) && d.length && d[0]?.uuid) {
+            this.fillBlockUUID(d[0].uuid);
+          }
+        },
+
+        async clearSelectedBlocks() {
+          const req = { method: 'POST', url: '/api/block/selected/clear', body: '{}' };
+          await this.run('清空选中块', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async newBlockUUID() {
+          const req = { method: 'GET', url: '/api/block/new-uuid' };
+          const d = await this.run('生成块 UUID', req, () => this.api(req.url));
+          if (d?.uuid) {
+            this.fillBlockUUID(d.uuid);
+            this.block.insertTarget = d.uuid;
+          }
+        },
+
+        async getPrevSibling() {
+          if (!this.block.siblingUUID) { this.print('请输入块 UUID'); return; }
+          const req = { method: 'GET', url: '/api/block/prev-sibling?uuid=' + encodeURIComponent(this.block.siblingUUID) };
+          const d = await this.run('前兄弟块', req, () => this.api(req.url));
+          if (d?.uuid) this.fillBlockUUID(d.uuid);
+        },
+
+        async getNextSibling() {
+          if (!this.block.siblingUUID) { this.print('请输入块 UUID'); return; }
+          const req = { method: 'GET', url: '/api/block/next-sibling?uuid=' + encodeURIComponent(this.block.siblingUUID) };
+          const d = await this.run('后兄弟块', req, () => this.api(req.url));
+          if (d?.uuid) this.fillBlockUUID(d.uuid);
         },
 
         async insertBlock() {
@@ -1426,6 +1711,112 @@
           this.run('页面详情', req, () => this.api(req.url));
         },
 
+        async createTagAdvanced() {
+          if (!this.tagOps.createName) { this.print('请输入标签名'); return; }
+          const req = {
+            method: 'POST',
+            url: '/api/tag/create',
+            body: JSON.stringify({ name: this.tagOps.createName, uuid: this.tagOps.createUUID }),
+          };
+          const d = await this.run('创建标签', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+          if (d) {
+            this.tagOps.queryNameOrID = this.tagOps.createName;
+            this.tagOps.createName = '';
+            this.tagOps.createUUID = '';
+            this.refreshTagTab();
+          }
+        },
+
+        async tagGet() {
+          if (!this.tagOps.queryNameOrID) { this.print('请输入标签名或ID'); return; }
+          const req = { method: 'GET', url: '/api/tag?nameOrID=' + encodeURIComponent(this.tagOps.queryNameOrID) };
+          await this.run('获取标签', req, () => this.api(req.url));
+        },
+
+        async tagSearch() {
+          if (!this.tagOps.queryNameOrID) { this.print('请输入搜索关键词'); return; }
+          const req = { method: 'GET', url: '/api/tag/search?name=' + encodeURIComponent(this.tagOps.queryNameOrID) };
+          await this.run('搜索标签', req, () => this.api(req.url));
+        },
+
+        async tagObjects() {
+          if (!this.tagOps.queryNameOrID) { this.print('请输入标签名'); return; }
+          const req = { method: 'GET', url: '/api/tag/objects?name=' + encodeURIComponent(this.tagOps.queryNameOrID) };
+          await this.run('标签对象块', req, () => this.api(req.url));
+        },
+
+        async tagPropertyRelation() {
+          if (!this.tagOps.relationTagID || !this.tagOps.relationTarget) { this.print('请输入 tag-id 和 target'); return; }
+          const req = {
+            method: 'POST',
+            url: '/api/tag/property',
+            body: JSON.stringify({ action: this.tagOps.relationAction, tagID: this.tagOps.relationTagID, target: this.tagOps.relationTarget }),
+          };
+          await this.run('标签属性关系', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async tagExtendsRelation() {
+          if (!this.tagOps.relationTagID || !this.tagOps.relationTarget) { this.print('请输入 tag-id 和 target'); return; }
+          const req = {
+            method: 'POST',
+            url: '/api/tag/extends',
+            body: JSON.stringify({ action: this.tagOps.relationAction, tagID: this.tagOps.relationTagID, target: this.tagOps.relationTarget }),
+          };
+          await this.run('标签继承关系', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async tagBlockRelation() {
+          if (!this.tagOps.blockID || !this.tagOps.blockTagID) { this.print('请输入 block-id 和 tag-id'); return; }
+          const req = {
+            method: 'POST',
+            url: '/api/tag/block',
+            body: JSON.stringify({ action: this.tagOps.blockAction, blockID: this.tagOps.blockID, tagID: this.tagOps.blockTagID }),
+          };
+          await this.run('块标签关系', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async propertyList() {
+          const req = { method: 'GET', url: '/api/property/list' };
+          await this.run('属性列表', req, () => this.api(req.url));
+        },
+
+        async propertyGet() {
+          if (!this.propertyOps.key) { this.print('请输入属性 key'); return; }
+          const req = { method: 'GET', url: '/api/property?key=' + encodeURIComponent(this.propertyOps.key) };
+          await this.run('属性详情', req, () => this.api(req.url));
+        },
+
+        async propertyUpsert() {
+          if (!this.propertyOps.key) { this.print('请输入属性 key'); return; }
+
+          let schema = null;
+          if (this.propertyOps.schemaText.trim()) {
+            try {
+              schema = JSON.parse(this.propertyOps.schemaText);
+            } catch (e) {
+              this.print('schema json 格式错误: ' + e.message);
+              return;
+            }
+          }
+
+          const req = {
+            method: 'POST',
+            url: '/api/property/upsert',
+            body: JSON.stringify({ key: this.propertyOps.key, schema }),
+          };
+          await this.run('属性 upsert', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async propertyRemove() {
+          if (!this.propertyOps.key) { this.print('请输入属性 key'); return; }
+          const req = {
+            method: 'POST',
+            url: '/api/property/remove',
+            body: JSON.stringify({ key: this.propertyOps.key }),
+          };
+          await this.run('属性 remove', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
         async doSearch() {
           if (!this.searchQ) { this.print('请输入关键词'); return; }
           const p = new URLSearchParams(); p.set('q', this.searchQ); if (this.searchTag) p.set('tag', this.searchTag);
@@ -1502,6 +1893,48 @@
         async runGraphConfig() {
           const req = { method: 'GET', url: '/api/graph/config' };
           await this.run('用户配置', req, () => this.api(req.url));
+        },
+        async runGraphAppInfo() {
+          const req = { method: 'GET', url: '/api/graph/app-info' };
+          await this.run('App信息', req, () => this.api(req.url));
+        },
+        async runGraphUserInfo() {
+          const req = { method: 'GET', url: '/api/graph/user-info' };
+          await this.run('用户信息', req, () => this.api(req.url));
+        },
+        async runGraphCurrentConfig() {
+          const req = { method: 'GET', url: '/api/graph/current-config' };
+          await this.run('图谱配置', req, () => this.api(req.url));
+        },
+        async runGraphFavorites() {
+          const req = { method: 'GET', url: '/api/graph/favorites' };
+          await this.run('图谱收藏', req, () => this.api(req.url));
+        },
+        async runGraphRecent() {
+          const req = { method: 'GET', url: '/api/graph/recent' };
+          await this.run('最近访问', req, () => this.api(req.url));
+        },
+        async runGraphTemplates() {
+          const req = { method: 'GET', url: '/api/graph/templates' };
+          await this.run('图谱模板', req, () => this.api(req.url));
+        },
+        async runGraphStateGet() {
+          if (!this.graphState.key) { this.print('请输入 state key'); return; }
+          const req = { method: 'GET', url: '/api/graph/state?key=' + encodeURIComponent(this.graphState.key) };
+          await this.run('读取状态', req, () => this.api(req.url));
+        },
+        async runGraphStateSet() {
+          if (!this.graphState.key) { this.print('请输入 state key'); return; }
+          let value = this.graphState.value;
+          try {
+            value = JSON.parse(this.graphState.value);
+          } catch (_) { }
+          const req = {
+            method: 'POST',
+            url: '/api/graph/state',
+            body: JSON.stringify({ key: this.graphState.key, value }),
+          };
+          await this.run('写入状态', req, () => this.api(req.url, { method: 'POST', body: req.body }));
         },
       };
     }

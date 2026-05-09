@@ -16,7 +16,7 @@
 - 开发者增强：
   - `doc`：启动交互式命令文档站
   - `web`：打开可视化命令执行页面
-  - `webui`：启动简化 Logseq 操作页面（页面/块/搜索/查询 + 标签列表 + 元数据过滤 + 最近操作回放 + 连接信息诊断）
+  - `webui`：启动简化 Logseq 操作页面（页面/块/搜索/查询 + 标签/属性 schema 管理 + Graph 状态读写 + 最近操作回放 + 连接信息诊断）
   - `mcp`：以 MCP 方式暴露命令树
   - `completion`：生成 shell 自动补全
 
@@ -292,6 +292,47 @@
 - `GET /api/tags`
 - `GET /api/pages/filter?tag=&name=&property=&value=&mode=contains&includeJournal=true`
 - `GET /api/search?q=<kw>&tag=<optional-tag>`（搜索结果按标签可选过滤）
+
+## WebUI 增强能力（新增）
+
+当前 `webui` 还支持以下增强操作：
+
+- 页面：创建 Journal 页面（可指定日期）
+- 块：当前焦点块、当前选中块、清空选中、生成 UUID、查询前后兄弟块
+- 图谱：`app-info/user-info/current-config/favorites/recent/templates`，以及 `state` 读写
+- 标签：按名称/ID 查询、搜索、创建标签，维护 `tag-property` / `tag-extends` / `block-tag` 关系
+- 属性 schema：`list/get/upsert/remove`
+- 快捷预设：Graph `state key` 常用键一键填充、Property schema 模板一键填充
+- 一键验证：串行执行轻量 smoke（health/graph/config/tags/property-list）快速检查联通性
+
+对应后端接口（节选）：
+
+- `POST /api/page/journal`
+- `GET /api/block/current`
+- `GET /api/block/selected`
+- `POST /api/block/selected/clear`
+- `GET /api/block/new-uuid`
+- `GET /api/block/prev-sibling?uuid=`
+- `GET /api/block/next-sibling?uuid=`
+- `GET /api/graph/app-info`
+- `GET /api/graph/user-info`
+- `GET /api/graph/current-config`
+- `GET /api/graph/favorites`
+- `GET /api/graph/recent`
+- `GET /api/graph/templates`
+- `GET /api/graph/state?key=`
+- `POST /api/graph/state`
+- `GET /api/tag?nameOrID=`
+- `GET /api/tag/search?name=`
+- `POST /api/tag/create`
+- `GET /api/tag/objects?name=`
+- `POST /api/tag/property`
+- `POST /api/tag/extends`
+- `POST /api/tag/block`
+- `GET /api/property/list`
+- `GET /api/property?key=`
+- `POST /api/property/upsert`
+- `POST /api/property/remove`
 
 ## 输出说明
 
