@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -91,13 +92,17 @@ func (c *Client) CallAPI(ctx context.Context, method string, args ...any) (json.
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("send request: %w", err)
+		return nil, friendlyConnectionError(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return nil, fmt.Errorf("logseq api: authentication failed (HTTP %d) — check your API token", resp.StatusCode)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -131,4 +136,19 @@ func decode[T any](raw json.RawMessage, err error) (T, error) {
 		return zero, fmt.Errorf("decode response: %w", err)
 	}
 	return result, nil
+}
+
+// friendlyConnectionError wraps low-level connection errors with user-friendly messages.
+func friendlyConnectionError(err error) error {
+	msg := err.Error()
+	if strings.Contains(msg, "connection refused") {
+		return fmt.Errorf("cannot connect to Logseq — is it running with the HTTP API server enabled? (%w)", err)
+	}
+	if strings.Contains(msg, "no such host") || strings.Contains(msg, "dial tcp") {
+		return fmt.Errorf("cannot reach Logseq API server — check the host and port configuration (%w)", err)
+	}
+	if strings.Contains(msg, "timeout") || strings.Contains(msg, "deadline exceeded") {
+		return fmt.Errorf("connection to Logseq timed out — the server may be busy or unreachable (%w)", err)
+	}
+	return fmt.Errorf("failed to connect to Logseq: %w", err)
 }

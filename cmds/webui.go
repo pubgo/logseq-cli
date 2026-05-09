@@ -32,9 +32,9 @@ func WebUICmd() *redant.Command {
 		},
 		Handler: func(ctx context.Context, inv *redant.Invocation) error {
 			connInfo := CurrentClientConnectionInfo()
-			fmt.Fprintf(inv.Stdout, "[webui] listening on http://%s\n", addr)
-			fmt.Fprintf(inv.Stdout, "[webui] logseq api: %s (host=%s, port=%s)\n", connInfo.BaseURL, connInfo.HostSource, connInfo.PortSource)
-			fmt.Fprintln(inv.Stdout, "[webui] press Ctrl+C to stop")
+			_, _ = fmt.Fprintf(inv.Stdout, "[webui] listening on http://%s\n", addr)
+			_, _ = fmt.Fprintf(inv.Stdout, "[webui] logseq api: %s (host=%s, port=%s)\n", connInfo.BaseURL, connInfo.HostSource, connInfo.PortSource)
+			_, _ = fmt.Fprintln(inv.Stdout, "[webui] press Ctrl+C to stop")
 			return webui.Run(ctx, addr, open, NewClient(), connInfo)
 		},
 	}

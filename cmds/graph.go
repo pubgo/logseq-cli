@@ -145,7 +145,7 @@ func QueryCmd() *redant.Command {
 					if err != nil {
 						return err
 					}
-					var buf json.RawMessage = result
+					buf := json.RawMessage(result)
 					enc := json.NewEncoder(inv.Stdout)
 					enc.SetIndent("", "  ")
 					return enc.Encode(buf)
@@ -163,7 +163,7 @@ func QueryCmd() *redant.Command {
 					if err != nil {
 						return err
 					}
-					var buf json.RawMessage = result
+					buf := json.RawMessage(result)
 					enc := json.NewEncoder(inv.Stdout)
 					enc.SetIndent("", "  ")
 					return enc.Encode(buf)
