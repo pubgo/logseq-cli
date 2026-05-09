@@ -197,6 +197,14 @@ P0 仅覆盖三件事：
 - `page get --blocks`
 - `page properties`
 
+当前已落地的 CLI 入口：`logseq page get-context <name> --max-blocks --max-depth --include-properties`
+
+返回同样使用统一信封，并在 `data.stats` 中提供：
+
+- `returned_blocks`
+- `clipped_by_depth`
+- `clipped_by_limit`
+
 ---
 
 ## 3.4 `logseq.page.append_safe`

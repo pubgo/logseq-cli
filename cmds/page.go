@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +21,7 @@ func PageCmd() *redant.Command {
 			pageCurrentCmd(),
 			pageCurrentTreeCmd(),
 			pageGetCmd(),
+			pageGetContextCmd(),
 			pageCreateCmd(),
 			pageAppendSafeCmd(),
 			pageJournalCmd(),
@@ -30,6 +32,220 @@ func PageCmd() *redant.Command {
 			pagePropertiesCmd(),
 		},
 	}
+}
+
+type pageContextBlock struct {
+	UUID       string             `json:"uuid,omitempty"`
+	Content    string             `json:"content,omitempty"`
+	Marker     string             `json:"marker,omitempty"`
+	Priority   string             `json:"priority,omitempty"`
+	Level      int                `json:"level,omitempty"`
+	Properties map[string]any     `json:"properties,omitempty"`
+	Children   []pageContextBlock `json:"children,omitempty"`
+}
+
+type pageContextLimits struct {
+	MaxBlocks         int  `json:"max_blocks"`
+	MaxDepth          int  `json:"max_depth"`
+	IncludeProperties bool `json:"include_properties"`
+}
+
+type pageContextStats struct {
+	ReturnedBlocks int `json:"returned_blocks"`
+	ClippedByDepth int `json:"clipped_by_depth,omitempty"`
+	ClippedByLimit int `json:"clipped_by_limit,omitempty"`
+}
+
+type pageContextResult struct {
+	Page          *logseq.Page       `json:"page"`
+	Properties    map[string]any     `json:"properties,omitempty"`
+	OutlineBlocks []pageContextBlock `json:"outline_blocks"`
+	Limits        pageContextLimits  `json:"limits"`
+	Stats         pageContextStats   `json:"stats"`
+}
+
+type pageContextBuilder struct {
+	maxBlocks      int
+	maxDepth       int
+	seen           int
+	clippedByDepth int
+	clippedByLimit int
+}
+
+func pageGetContextCmd() *redant.Command {
+	maxBlocksRaw := "200"
+	maxDepthRaw := "6"
+	includeProperties := true
+
+	return &redant.Command{
+		Use:   "get-context <name>",
+		Short: "Get LLM-friendly page context (bounded outline)",
+		Args: redant.ArgSet{
+			{Name: "name", Required: true, Value: redant.StringOf(new(string)), Description: "Page name"},
+		},
+		Options: redant.OptionSet{
+			{Flag: "max-blocks", Description: "Maximum number of returned blocks", Default: "200", Value: redant.StringOf(&maxBlocksRaw)},
+			{Flag: "max-depth", Description: "Maximum outline depth", Default: "6", Value: redant.StringOf(&maxDepthRaw)},
+			{Flag: "include-properties", Description: "Include page properties in response", Default: "true", Value: redant.BoolOf(&includeProperties)},
+		},
+		ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) (*llmEnvelope, error) {
+			start := time.Now()
+			maxBlocks := 200
+			maxDepth := 6
+
+			name := strings.TrimSpace(inv.Args[0])
+			if name == "" {
+				return envelopeFailure(start, fmt.Errorf("page name is required"), "BAD_REQUEST", "请提供页面名"), nil
+			}
+
+			if strings.TrimSpace(maxBlocksRaw) != "" {
+				v, convErr := strconv.Atoi(strings.TrimSpace(maxBlocksRaw))
+				if convErr != nil {
+					return envelopeFailure(start, fmt.Errorf("invalid max-blocks: %w", convErr), "BAD_REQUEST", "max-blocks 需要是数字"), nil
+				}
+				maxBlocks = v
+			}
+
+			if strings.TrimSpace(maxDepthRaw) != "" {
+				v, convErr := strconv.Atoi(strings.TrimSpace(maxDepthRaw))
+				if convErr != nil {
+					return envelopeFailure(start, fmt.Errorf("invalid max-depth: %w", convErr), "BAD_REQUEST", "max-depth 需要是数字"), nil
+				}
+				maxDepth = v
+			}
+
+			policyMaxBlocks := envIntOrDefault("LOGSEQ_LLM_MAX_RESULTS", 200)
+			if policyMaxBlocks <= 0 {
+				policyMaxBlocks = 200
+			}
+
+			if maxBlocks <= 0 {
+				maxBlocks = 200
+			}
+			if maxBlocks > policyMaxBlocks {
+				maxBlocks = policyMaxBlocks
+			}
+
+			if maxDepth <= 0 {
+				maxDepth = 6
+			}
+
+			client := NewClient()
+			page, err := client.GetPage(ctx, name)
+			if err != nil {
+				return envelopeFailure(start, err, "UPSTREAM_ERROR", "请先确认 API 连接正常", withCapabilityUsed("logseq.Editor.getPage")), nil
+			}
+			if page == nil {
+				return envelopeFailure(start, fmt.Errorf("page '%s' not found", name), "RESOURCE_NOT_FOUND", "请确认页面存在"), nil
+			}
+
+			blocks, err := client.GetPageBlocksTree(ctx, name)
+			if err != nil {
+				return envelopeFailure(start, err, "UPSTREAM_ERROR", "读取页面块树失败", withCapabilityUsed("logseq.Editor.getPageBlocksTree")), nil
+			}
+
+			var (
+				properties   map[string]any
+				fallbackUsed bool
+			)
+
+			if includeProperties {
+				properties, err = client.GetPageProperties(ctx, name)
+				if err != nil {
+					if strings.Contains(strings.ToLower(err.Error()), "methodnotexist") {
+						properties = page.Properties
+						fallbackUsed = true
+					} else {
+						return envelopeFailure(start, err, "UPSTREAM_ERROR", "读取页面属性失败", withCapabilityUsed("logseq.Editor.getPageProperties")), nil
+					}
+				}
+			}
+
+			builder := &pageContextBuilder{maxBlocks: maxBlocks, maxDepth: maxDepth}
+			outline := builder.buildBlocks(blocks, 1)
+
+			data := pageContextResult{
+				Page:          page,
+				Properties:    properties,
+				OutlineBlocks: outline,
+				Limits: pageContextLimits{
+					MaxBlocks:         maxBlocks,
+					MaxDepth:          maxDepth,
+					IncludeProperties: includeProperties,
+				},
+				Stats: pageContextStats{
+					ReturnedBlocks: builder.seen,
+					ClippedByDepth: builder.clippedByDepth,
+					ClippedByLimit: builder.clippedByLimit,
+				},
+			}
+
+			hints := make([]string, 0, 3)
+			if builder.clippedByLimit > 0 {
+				hints = append(hints, fmt.Sprintf("已按 max-blocks 裁剪 %d 个块", builder.clippedByLimit))
+			}
+			if builder.clippedByDepth > 0 {
+				hints = append(hints, fmt.Sprintf("已按 max-depth 裁剪 %d 个块", builder.clippedByDepth))
+			}
+			if fallbackUsed {
+				hints = append(hints, "当前版本不支持 getPageProperties，已回退到 getPage.properties")
+			}
+
+			opts := []llmEnvelopeOption{
+				withCapabilityUsed("logseq.Editor.getPage", "logseq.Editor.getPageBlocksTree"),
+				withHints(hints...),
+			}
+			if includeProperties {
+				opts = append(opts, withCapabilityUsed("logseq.Editor.getPageProperties"))
+			}
+			if fallbackUsed {
+				opts = append(opts, withFallbackUsed("page.properties.from.getPage"))
+			}
+
+			return envelopeSuccess(start, data, opts...), nil
+		}),
+	}
+}
+
+func (b *pageContextBuilder) buildBlocks(src []logseq.Block, depth int) []pageContextBlock {
+	out := make([]pageContextBlock, 0, len(src))
+	for i := range src {
+		if b.maxBlocks > 0 && b.seen >= b.maxBlocks {
+			b.clippedByLimit += countBlockSubtreeValue(src[i])
+			continue
+		}
+
+		if b.maxDepth > 0 && depth > b.maxDepth {
+			b.clippedByDepth += countBlockSubtreeValue(src[i])
+			continue
+		}
+
+		node := pageContextBlock{
+			UUID:       strings.TrimSpace(src[i].UUID),
+			Content:    truncate(src[i].Content, 500),
+			Marker:     strings.TrimSpace(src[i].Marker),
+			Priority:   strings.TrimSpace(src[i].Priority),
+			Level:      src[i].Level,
+			Properties: src[i].Properties,
+		}
+		b.seen++
+
+		if len(src[i].Children) > 0 {
+			node.Children = b.buildBlocks(src[i].Children, depth+1)
+		}
+
+		out = append(out, node)
+	}
+
+	return out
+}
+
+func countBlockSubtreeValue(b logseq.Block) int {
+	total := 1
+	for i := range b.Children {
+		total += countBlockSubtreeValue(b.Children[i])
+	}
+	return total
 }
 
 func pageAppendSafeCmd() *redant.Command {
