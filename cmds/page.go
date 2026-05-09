@@ -75,7 +75,7 @@ type pageContextBuilder struct {
 func pageGetContextCmd() *redant.Command {
 	maxBlocksRaw := "200"
 	maxDepthRaw := "6"
-	includeProperties := true
+	includePropertiesRaw := "true"
 
 	return &redant.Command{
 		Use:   "get-context <name>",
@@ -86,12 +86,13 @@ func pageGetContextCmd() *redant.Command {
 		Options: redant.OptionSet{
 			{Flag: "max-blocks", Description: "Maximum number of returned blocks", Default: "200", Value: redant.StringOf(&maxBlocksRaw)},
 			{Flag: "max-depth", Description: "Maximum outline depth", Default: "6", Value: redant.StringOf(&maxDepthRaw)},
-			{Flag: "include-properties", Description: "Include page properties in response", Default: "true", Value: redant.BoolOf(&includeProperties)},
+			{Flag: "include-properties", Description: "Include page properties in response", Default: "true", Value: redant.StringOf(&includePropertiesRaw)},
 		},
 		ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) (*llmEnvelope, error) {
 			start := time.Now()
 			maxBlocks := 200
 			maxDepth := 6
+			includeProperties := true
 
 			name := strings.TrimSpace(inv.Args[0])
 			if name == "" {
@@ -112,6 +113,14 @@ func pageGetContextCmd() *redant.Command {
 					return envelopeFailure(start, fmt.Errorf("invalid max-depth: %w", convErr), "BAD_REQUEST", "max-depth 需要是数字"), nil
 				}
 				maxDepth = v
+			}
+
+			if strings.TrimSpace(includePropertiesRaw) != "" {
+				v, convErr := strconv.ParseBool(strings.TrimSpace(includePropertiesRaw))
+				if convErr != nil {
+					return envelopeFailure(start, fmt.Errorf("invalid include-properties: %w", convErr), "BAD_REQUEST", "include-properties 需要是 true/false"), nil
+				}
+				includeProperties = v
 			}
 
 			policyMaxBlocks := envIntOrDefault("LOGSEQ_LLM_MAX_RESULTS", 200)

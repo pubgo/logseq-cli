@@ -64,6 +64,28 @@
 
 - `-b, --blocks`（bool）：包含页面块树
 
+### `logseq page get-context <name>`
+
+获取面向 LLM 的页面上下文视图（带块树裁剪与统计信息）。
+
+参数：
+
+- `name`（string，必填）：页面名称
+
+选项：
+
+- `--max-blocks`（int，默认 `200`）：最多返回的块数（同时受 `LOGSEQ_LLM_MAX_RESULTS` 上限约束）
+- `--max-depth`（int，默认 `6`）：块树最大深度
+- `--include-properties`（bool，默认 `true`）：是否返回页面属性
+
+返回字段（`data` 节选）：
+
+- `page`：页面基础信息
+- `properties`：页面属性（当 `include-properties=true` 时）
+- `outline_blocks[]`：裁剪后的块树（`uuid/content/marker/priority/level/properties/children`）
+- `limits`：本次生效的裁剪参数
+- `stats`：`returned_blocks / clipped_by_depth / clipped_by_limit`
+
 ### `logseq page create <name>`
 
 创建页面。
