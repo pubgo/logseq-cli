@@ -155,19 +155,25 @@ type GraphInfo struct {
 logseq-cli/
 ├── go.mod
 ├── main.go                     # CLI 入口（根命令与全局参数）
+├── cmd/
+│   └── e2e/                    # 独立 E2E 可执行程序
 ├── cmds/                       # CLI 子命令定义
 │   ├── cmds.go                 # 共享配置与客户端创建
-│   ├── page.go                 # page list/get/create/delete/rename
+│   ├── page.go                 # page list/get/create/delete/rename/refs/namespace/properties
 │   ├── tag.go                  # tag list
-│   ├── block.go                # block get/insert/update/remove/move/prepend/append
-│   └── graph.go                # graph/query/search 命令
+│   ├── block.go                # block get/insert/update/remove/move/prepend/append/property/collapse
+│   ├── graph.go                # graph/query/search 命令
+│   └── webui.go                # webui 命令入口
+├── internal/
+│   └── webui/                  # WebUI 服务与静态页面
 ├── pkg/
 │   └── logseq/                 # Logseq Go SDK
 │       ├── client.go           # HTTP 客户端（底层 RPC 调用）
 │       ├── types.go            # 数据模型定义
 │       ├── editor.go           # Editor 命名空间 API
 │       ├── app.go              # App 命名空间 API
-│       └── db.go               # DB 命名空间 API（Datalog/DSL 查询）
+│       ├── db.go               # DB 命名空间 API（Datalog/DSL 查询）
+│       └── tags.go             # 标签聚合逻辑（含多路径回退）
 └── docs/
     └── ANALYSIS.md             # 本文档
 ```
@@ -251,12 +257,15 @@ func (c *Client) DSLQuery(ctx context.Context, query string) (json.RawMessage, e
 
 ### 5.1 全局 Flags
 
-| Flag       | 环境变量           | 默认值      | 说明                      |
-| ---------- | ------------------ | ----------- | ------------------------- |
-| `--token`  | `LOGSEQ_API_TOKEN` | —           | API 认证 token（必须）    |
-| `--host`   | `LOGSEQ_HOST`      | `127.0.0.1` | Logseq 主机地址           |
-| `--port`   | `LOGSEQ_PORT`      | `12315`     | Logseq 端口               |
-| `--output` | —                  | `json`      | 输出格式：`json` / `text` |
+| Flag              | 环境变量           | 默认值      | 说明                                                     |
+| ----------------- | ------------------ | ----------- | -------------------------------------------------------- |
+| `-t, --token`     | `LOGSEQ_API_TOKEN` | —           | API 认证 token（必须）                                   |
+| `--host`          | `LOGSEQ_HOST`      | `127.0.0.1` | Logseq 主机地址                                          |
+| `-p, --port`      | `LOGSEQ_PORT`      | `12315`     | Logseq 端口                                              |
+| `--raw-envelope`  | —                  | `false`     | 输出结构化 NDJSON envelope                               |
+| `--list-commands` | —                  | `false`     | 列出全部命令（含子命令）                                 |
+| `--list-flags`    | —                  | `false`     | 列出全部参数                                             |
+| `--list-format`   | —                  | `text`      | `--list-commands` / `--list-flags` 输出格式（text/json） |
 
 ### 5.2 命令树
 
@@ -265,19 +274,25 @@ logseq
 ├── page                        # 页面管理
 │   ├── list                    # 列出所有页面
 │   ├── get <name>              # 获取页面内容
-│   ├── create <name>           # 创建页面
+│   ├── create <name>           # 创建页面（支持 --content / stdin）
 │   ├── delete <name>           # 删除页面
 │   ├── rename <old> <new>      # 重命名页面
+│   ├── refs <name>             # 获取页面反向引用
+│   ├── namespace <name>        # 命名空间页面查询（支持 --tree）
+│   └── properties <name>       # 页面属性读写
 ├── block                       # Block 管理
 │   ├── get <uuid>              # 获取 Block
 │   ├── insert <uuid> <content> # 插入 Block
 │   ├── update <uuid> <content> # 更新 Block
 │   ├── remove <uuid>           # 删除 Block
-│   ├── move <src> <target>     # 移动 Block
+│   ├── move <src> <target>     # 移动 Block（支持 --before）
 │   ├── prepend <page> <content># 页面头部插入
-│   └── append <page> <content> # 页面尾部追加
+│   ├── append <page> <content> # 页面尾部追加
+│   ├── property                # Block 属性操作（get/set/remove）
+│   └── collapse <uuid>         # Block 折叠/展开（--expand）
 ├── graph                       # 图谱信息
-│   └── info                    # 当前图谱信息
+│   ├── info                    # 当前图谱信息
+│   └── config                  # 用户配置
 ├── query                       # 查询
 │   ├── datalog <query>         # Datascript/Datalog 查询
 │   └── dsl <query>             # Logseq DSL 查询
@@ -287,8 +302,10 @@ logseq
 ├── completion <shell>          # shell 自动补全
 ├── doc                         # 交互式命令文档站
 ├── web                         # 可视化命令执行页面
-├── webui                       # 简易 Logseq 操作台（页面/块/搜索/查询/过滤）
+├── webui                       # 简易 Logseq 操作台（页面/块/搜索/查询/过滤/连接诊断）
 ├── mcp                         # MCP 集成命令
+│   ├── list                    # 列出 MCP 工具元数据
+│   └── serve                   # 启动 MCP 服务
 └── llms-txt                    # LLM 友好文档导出
 ```
 
@@ -308,7 +325,7 @@ import (
 func main() {
     var token string
     var host string
-    var port int
+    var port string
 
     root := redant.Command{
         Use:   "logseq",
@@ -317,9 +334,11 @@ func main() {
             {
                 Flag:        "token",
                 Description: "Logseq API token",
+                Shorthand:   "t",
                 Envs:        []string{"LOGSEQ_API_TOKEN"},
                 Required:    true,
                 Value:       redant.StringOf(&token),
+                Inherit:     true,
             },
             {
                 Flag:        "host",
@@ -327,13 +346,16 @@ func main() {
                 Envs:        []string{"LOGSEQ_HOST"},
                 Default:     "127.0.0.1",
                 Value:       redant.StringOf(&host),
+                Inherit:     true,
             },
             {
                 Flag:        "port",
+                Shorthand:   "p",
                 Description: "Logseq port",
                 Envs:        []string{"LOGSEQ_PORT"},
                 Default:     "12315",
-                Value:       redant.IntOf(&port),
+                Value:       redant.StringOf(&port),
+                Inherit:     true,
             },
         },
         Children: []*redant.Command{
@@ -342,8 +364,16 @@ func main() {
             graphCmd(),   // graph 子命令
             queryCmd(),   // query 子命令
             searchCmd(),  // search 命令
+            tagCmd(),     // tag 子命令
+            webuiCmd(),   // webui 命令
+            llmstxtcmd.New(),
+            doccmd.New(),
         },
     }
+
+    webcmd.AddWebCommand(&root)
+    mcpcmd.AddMCPCommand(&root)
+    completioncmd.AddCompletionCommand(&root)
 
     if err := root.Invoke().WithOS().Run(); err != nil {
         fmt.Fprintln(os.Stderr, err)
@@ -375,15 +405,17 @@ func main() {
 
 1. **Block 追加的 Workaround**: `logseq.Editor.appendBlock` 不存在，需通过 `getPageBlocksTree` + `insertBlock(lastBlockUUID, content, {sibling: true})` 实现。
 
-2. **页面属性获取**: `getPageProperties` 不可用，需从 `getPageBlocksTree` 返回的首个 Block 的 `properties` 字段读取。
+2. **页面属性获取**: `logseq.Editor.getPageProperties` 在常见版本中不可用；CLI 当前通过 `getPage` 读取页面对象中的 `properties`，并通过 `setPageProperties` 写入。
 
 3. **Journal 创建**: `createJournalPage` 不可用，需调用 `createPage("YYYY_MM_DD")` + 通过 `journalDay` 查找确认。
 
 4. **Page 字段中的 `page` 引用**: Block 中的 `page` 字段可能是 `int` 或 `{id: int}` 两种格式，Go SDK 需做兼容解析。
 
-5. **Search 方法**: `logseq.App.search` 在部分版本可用、部分不可用；可用 Datascript 查询做降级搜索方案。
+5. **Search 方法**: `logseq.App.search` 在部分版本可用、部分不可用；必要时可用 Datascript 查询做降级搜索方案。
 
-6. **Token 安全**: Token 应优先从环境变量读取，避免暴露在命令行参数中。
+6. **标签聚合与过滤策略**: 某些图谱中 `:block/tags` 结果偏少，需回退 `:block/refs` 与页面属性聚合；WebUI 的标签过滤与搜索标签过滤已采用多路径匹配。
+
+7. **Token 安全**: Token 应优先从环境变量读取，避免暴露在命令行参数中。
 
 ---
 

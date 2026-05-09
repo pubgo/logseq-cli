@@ -6,18 +6,18 @@
 
 ## 功能特性
 
-- 页面管理：列出、获取、创建、删除、重命名页面
+- 页面管理：列出、获取、创建、删除、重命名、命名空间、页面属性、反向引用
 - 标签管理：列出全部标签
-- 块管理：获取、插入、更新、删除、移动、页面头尾追加
+- 块管理：获取、插入、更新、删除、移动、页面头尾追加、折叠/展开、属性读写
 - 查询能力：Datalog / Logseq DSL
-- 图谱信息：查看当前 Graph 元数据
+- 图谱信息：查看 Graph 基础信息与用户配置
 - 全文搜索：调用 `logseq.App.search`
 - 开发者增强：
-	- `doc`：启动交互式命令文档站
-	- `web`：打开可视化命令执行页面
-	- `webui`：启动简化 Logseq 操作页面（页面/块/搜索/查询 + 标签列表 + 元数据过滤 + 最近操作回放 + 连接信息诊断）
-	- `mcp`：以 MCP 方式暴露命令树
-	- `completion`：生成 shell 自动补全
+  - `doc`：启动交互式命令文档站
+  - `web`：打开可视化命令执行页面
+  - `webui`：启动简化 Logseq 操作页面（页面/块/搜索/查询 + 标签列表 + 元数据过滤 + 最近操作回放 + 连接信息诊断）
+  - `mcp`：以 MCP 方式暴露命令树
+  - `completion`：生成 shell 自动补全
 
 ## 环境要求
 
@@ -109,15 +109,15 @@
 
 ## 全局参数
 
-| 参数              | 环境变量           | 默认值      | 说明                       |
-| ----------------- | ------------------ | ----------- | -------------------------- |
-| `-t, --token`     | `LOGSEQ_API_TOKEN` | 无（必填）  | Logseq API token           |
-| `--host`          | `LOGSEQ_HOST`      | `127.0.0.1` | Logseq API 主机            |
-| `-p, --port`      | `LOGSEQ_PORT`      | `12315`     | Logseq API 端口            |
-| `-o, --output`    | -                  | `json`      | 输出格式：`json` / `text`  |
-| `--raw-envelope`  | -                  | `false`     | 输出结构化 NDJSON envelope |
-| `--list-commands` | -                  | `false`     | 列出全部命令（含子命令）   |
-| `--list-flags`    | -                  | `false`     | 列出全部参数               |
+| 参数              | 环境变量           | 默认值      | 说明                                                           |
+| ----------------- | ------------------ | ----------- | -------------------------------------------------------------- |
+| `-t, --token`     | `LOGSEQ_API_TOKEN` | 无（必填）  | Logseq API token                                               |
+| `--host`          | `LOGSEQ_HOST`      | `127.0.0.1` | Logseq API 主机                                                |
+| `-p, --port`      | `LOGSEQ_PORT`      | `12315`     | Logseq API 端口                                                |
+| `--raw-envelope`  | -                  | `false`     | 输出结构化 NDJSON envelope                                     |
+| `--list-commands` | -                  | `false`     | 列出全部命令（含子命令）                                       |
+| `--list-flags`    | -                  | `false`     | 列出全部参数                                                   |
+| `--list-format`   | -                  | `text`      | `--list-commands` / `--list-flags` 输出格式（`text` / `json`） |
 
 ## 命令总览
 
@@ -125,23 +125,31 @@
 
 - `logseq page list`
 - `logseq page get <name> [-b|--blocks]`
-- `logseq page create <name>`
+- `logseq page create <name> [--content <text|->]`
 - `logseq page delete <name>`
 - `logseq page rename <old-name> <new-name>`
+- `logseq page refs <name>`
+- `logseq page namespace <name> [--tree]`
+- `logseq page properties <name> [key=value ...]`
 
 ### 块（block）
 
 - `logseq block get <uuid> [-c|--children]`
-- `logseq block insert <target-uuid> <content> [-s|--sibling]`
-- `logseq block update <uuid> <content>`
+- `logseq block insert <target-uuid> <content|-> [-s|--sibling]`
+- `logseq block update <uuid> <content|->`
 - `logseq block remove <uuid>`
-- `logseq block move <src-uuid> <target-uuid>`
-- `logseq block prepend <page> <content>`
-- `logseq block append <page> <content>`
+- `logseq block move <src-uuid> <target-uuid> [--before]`
+- `logseq block prepend <page> <content|->`
+- `logseq block append <page> <content|->`
+- `logseq block property get <uuid>`
+- `logseq block property set <uuid> <key> <value>`
+- `logseq block property remove <uuid> <key>`
+- `logseq block collapse <uuid> [--expand]`
 
 ### 图谱（graph）
 
 - `logseq graph info`
+- `logseq graph config`
 
 ### 查询（query）
 
@@ -170,9 +178,10 @@
 
 - 查看所有页面：`logseq page list`
 - 获取页面及其块树：`logseq page get "Daily Notes" --blocks`
-- 新建页面：`logseq page create "项目规划"`
+- 新建页面并从 stdin 读取首块内容：`echo "- [ ] todo" | logseq page create "项目规划" --content -`
 - 在页面末尾追加块：`logseq block append "项目规划" "- [ ] 第一阶段完成"`
-- 更新块内容：`logseq block update <uuid> "- [x] 第一阶段完成"`
+- 更新块内容（stdin）：`echo "- [x] 第一阶段完成" | logseq block update <uuid> -`
+- 设置块属性：`logseq block property set <uuid> priority A`
 - 执行 Datalog 查询：`logseq query datalog '[:find ?p :where [?b :block/name ?p]]'`
 - 全文搜索：`logseq search "Go SDK"`
 - 查看全部标签：`logseq tag list`
@@ -192,12 +201,12 @@
 
 - `GET /api/tags`
 - `GET /api/pages/filter?tag=&name=&property=&value=&mode=contains&includeJournal=true`
+- `GET /api/search?q=<kw>&tag=<optional-tag>`（搜索结果按标签可选过滤）
 
 ## 输出说明
 
-- 默认输出格式为 `json`
-- 可通过 `--output text` 切换为文本输出
-- 对接自动化流程时建议使用默认 `json` 或 `--raw-envelope`
+- 默认输出为 JSON（便于自动化处理）
+- 对接流水线建议使用默认 JSON 或 `--raw-envelope`
 
 ## 常见问题排查
 
@@ -222,8 +231,9 @@
 ## 项目结构
 
 - `main.go`：CLI 入口与全局参数
-- `cmds/`：命令定义（page / block / graph / query / search）
+- `cmds/`：命令定义（page / block / graph / query / search / tag / webui）
 - `pkg/logseq/`：Logseq API 客户端与数据类型
+- `internal/webui/`：WebUI 服务端与静态前端
 - `docs/`：分析文档与补充资料
 
 ## 参考文档
