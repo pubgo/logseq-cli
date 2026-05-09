@@ -46,11 +46,13 @@ func main() {
 			},
 		},
 		Children: []*redant.Command{
+			cmds.CapabilitiesCmd(),
 			cmds.PageCmd(),
 			cmds.BlockCmd(),
 			cmds.GraphCmd(),
 			cmds.QueryCmd(),
 			cmds.SearchCmd(),
+			cmds.SearchNotesCmd(),
 			cmds.PropertyCmd(),
 			cmds.TagCmd(),
 			cmds.WebUICmd(),

@@ -21,6 +21,7 @@ func PageCmd() *redant.Command {
 			pageCurrentTreeCmd(),
 			pageGetCmd(),
 			pageCreateCmd(),
+			pageAppendSafeCmd(),
 			pageJournalCmd(),
 			pageDeleteCmd(),
 			pageRenameCmd(),
@@ -28,6 +29,112 @@ func PageCmd() *redant.Command {
 			pageNamespaceCmd(),
 			pagePropertiesCmd(),
 		},
+	}
+}
+
+func pageAppendSafeCmd() *redant.Command {
+	var (
+		dryRun         bool
+		confirm        bool
+		idempotencyKey string
+	)
+
+	return &redant.Command{
+		Use:   "append-safe <name> <content>",
+		Short: "Safely append block to page (supports dry-run / idempotency)",
+		Args: redant.ArgSet{
+			{Name: "name", Required: true, Value: redant.StringOf(new(string)), Description: "Page name"},
+			{Name: "content", Required: true, Value: redant.StringOf(new(string)), Description: "Block content (use '-' for stdin)"},
+		},
+		Options: redant.OptionSet{
+			{Flag: "dry-run", Description: "Preview action without writing", Value: redant.BoolOf(&dryRun)},
+			{Flag: "confirm", Description: "Required in some write policies", Value: redant.BoolOf(&confirm)},
+			{Flag: "idempotency-key", Description: "Idempotency key to avoid duplicate writes", Value: redant.StringOf(&idempotencyKey)},
+		},
+		ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) (*llmEnvelope, error) {
+			start := time.Now()
+			pageName := strings.TrimSpace(inv.Args[0])
+			if pageName == "" {
+				return envelopeFailure(start, fmt.Errorf("page name is required"), "BAD_REQUEST", "请提供页面名"), nil
+			}
+
+			content, err := readContent(inv, inv.Args[1])
+			if err != nil {
+				return envelopeFailure(start, err, "BAD_REQUEST", "content 参数错误"), nil
+			}
+			content = strings.TrimSpace(content)
+			if content == "" {
+				return envelopeFailure(start, fmt.Errorf("content is required"), "BAD_REQUEST", "请提供非空内容"), nil
+			}
+
+			if err := ensureWriteAllowed("page.append-safe", dryRun, confirm, false); err != nil {
+				return envelopeFailure(start, err, "SAFETY_BLOCKED", "可先使用 --dry-run 或调整 LOGSEQ_LLM_WRITE_MODE"), nil
+			}
+
+			client := NewClient()
+			page, err := client.GetPage(ctx, pageName)
+			if err != nil {
+				return envelopeFailure(start, err, "UPSTREAM_ERROR", "请先确认 API 连接正常", withCapabilityUsed("logseq.Editor.getPage")), nil
+			}
+			if page == nil {
+				return envelopeFailure(start, fmt.Errorf("page '%s' not found", pageName), "RESOURCE_NOT_FOUND", "请确认页面存在"), nil
+			}
+
+			trimmedKey := strings.TrimSpace(idempotencyKey)
+			if !dryRun && trimmedKey != "" {
+				if rec, ok := getAppendSafeRecord(trimmedKey); ok {
+					payload := map[string]any{
+						"action":          "deduped",
+						"page":            pageName,
+						"idempotency_key": trimmedKey,
+						"block_uuid":      rec.BlockUUID,
+						"deduped":         true,
+						"write_mode":      currentLLMWriteMode(),
+						"message":         "duplicate idempotency key detected, skipped",
+						"created_at":      rec.CreatedAt.Format(time.RFC3339),
+					}
+					return envelopeSuccess(start, payload, withCapabilityUsed("logseq.Editor.getPage"), withHints("幂等键已命中，未重复写入")), nil
+				}
+			}
+
+			if dryRun {
+				payload := map[string]any{
+					"action":          "dry-run",
+					"page":            pageName,
+					"idempotency_key": trimmedKey,
+					"content_preview": truncate(content, 240),
+					"dry_run":         true,
+					"write_mode":      currentLLMWriteMode(),
+					"message":         "append preview only, nothing written",
+				}
+				return envelopeSuccess(start, payload, withCapabilityUsed("logseq.Editor.getPage"), withHints("dry-run 模式未执行写入")), nil
+			}
+
+			block, err := client.AppendBlockInPage(ctx, pageName, content)
+			if err != nil {
+				return envelopeFailure(start, err, "UPSTREAM_ERROR", "写入失败，请检查页面权限和 API 状态", withCapabilityUsed("logseq.Editor.appendBlockInPage")), nil
+			}
+
+			if trimmedKey != "" && block != nil {
+				setAppendSafeRecord(trimmedKey, appendSafeRecord{
+					BlockUUID:      strings.TrimSpace(block.UUID),
+					Page:           pageName,
+					ContentPreview: truncate(content, 240),
+					CreatedAt:      time.Now(),
+				})
+			}
+
+			payload := map[string]any{
+				"action":          "appended",
+				"page":            pageName,
+				"idempotency_key": trimmedKey,
+				"block_uuid":      block.UUID,
+				"deduped":         false,
+				"write_mode":      currentLLMWriteMode(),
+				"message":         "block appended",
+			}
+			return envelopeSuccess(start, payload, withCapabilityUsed("logseq.Editor.getPage", "logseq.Editor.appendBlockInPage")), nil
+		}),
 	}
 }
 

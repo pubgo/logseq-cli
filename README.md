@@ -70,11 +70,38 @@
 
 推荐先阅读：`docs/LLM_MCP.md`
 
+若你计划把本项目长期托管给 LLM（而不只是手工调用），建议继续阅读：`docs/LLM_P0_API.md`
+
+其中包含：
+
+- 面向 LLM 的 P0 工具契约（能力探测、安全写入、分页）
+- 统一 JSON 响应信封与错误码建议
+- 与现有命令树的映射和最小落地顺序
+
 其中包含：
 
 - 完整接入步骤
 - Claude Desktop 配置示例
 - 常见报错与排查
+
+建议在 LLM 会话开始时先执行：
+
+- `logseq capabilities get`
+
+用于获取当前实例能力矩阵（DSL/Search/Tag 字段可用性等），让模型优先走正确路径并减少试错。
+
+随后可优先使用：
+
+- `logseq search-notes <query> --limit 20 --cursor <cursor>`
+
+该命令提供 LLM 友好结构化结果与分页游标，避免一次性返回过大结果集。
+
+写入场景建议使用：
+
+- `logseq page append-safe <name> <content> --dry-run`
+- `logseq block delete-safe <uuid> --dry-run`
+
+并在确认后加 `--confirm` 执行实际写入/删除。
 
 ## 端到端集成测试（E2E）
 

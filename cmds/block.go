@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/pubgo/logseq-cli/pkg/logseq"
 	"github.com/pubgo/redant"
@@ -24,6 +26,7 @@ func BlockCmd() *redant.Command {
 			blockInsertCmd(),
 			blockInsertBatchCmd(),
 			blockUpdateCmd(),
+			blockDeleteSafeCmd(),
 			blockRemoveCmd(),
 			blockMoveCmd(),
 			blockPrependCmd(),
@@ -32,6 +35,86 @@ func BlockCmd() *redant.Command {
 			blockCollapseCmd(),
 		},
 	}
+}
+
+func blockDeleteSafeCmd() *redant.Command {
+	var (
+		dryRun  bool
+		confirm bool
+	)
+
+	return &redant.Command{
+		Use:   "delete-safe <uuid>",
+		Short: "Safely delete a block (dry-run + confirm)",
+		Args: redant.ArgSet{
+			{Name: "uuid", Required: true, Value: redant.StringOf(new(string)), Description: "Block UUID"},
+		},
+		Options: redant.OptionSet{
+			{Flag: "dry-run", Description: "Preview impact without deleting", Value: redant.BoolOf(&dryRun)},
+			{Flag: "confirm", Description: "Required for dangerous delete in most policies", Value: redant.BoolOf(&confirm)},
+		},
+		ResponseHandler: redant.Unary(func(ctx context.Context, inv *redant.Invocation) (*llmEnvelope, error) {
+			start := time.Now()
+			uuid := strings.TrimSpace(inv.Args[0])
+			if uuid == "" {
+				return envelopeFailure(start, fmt.Errorf("uuid is required"), "BAD_REQUEST", "请提供块 UUID"), nil
+			}
+
+			client := NewClient()
+			block, err := client.GetBlock(ctx, uuid, true)
+			if err != nil {
+				return envelopeFailure(start, err, "", "请先确认块可读取", withCapabilityUsed("logseq.Editor.getBlock")), nil
+			}
+			if block == nil {
+				return envelopeFailure(start, fmt.Errorf("block '%s' not found", uuid), "RESOURCE_NOT_FOUND", "请确认 UUID 正确"), nil
+			}
+
+			subtreeCount := countBlockSubtree(block)
+			preview := truncate(block.Content, 240)
+
+			if err := ensureWriteAllowed("block.delete-safe", dryRun, confirm, true); err != nil {
+				return envelopeFailure(start, err, "SAFETY_BLOCKED", "可先使用 --dry-run 或显式 --confirm"), nil
+			}
+
+			if dryRun {
+				payload := map[string]any{
+					"action":          "dry-run",
+					"uuid":            uuid,
+					"subtree_count":   subtreeCount,
+					"content_preview": preview,
+					"write_mode":      currentLLMWriteMode(),
+					"message":         "delete preview only, nothing deleted",
+				}
+				return envelopeSuccess(start, payload, withCapabilityUsed("logseq.Editor.getBlock"), withHints("dry-run 模式未执行删除")), nil
+			}
+
+			if err := client.RemoveBlock(ctx, uuid); err != nil {
+				return envelopeFailure(start, err, "UPSTREAM_ERROR", "删除失败，请检查块状态后重试", withCapabilityUsed("logseq.Editor.removeBlock")), nil
+			}
+
+			payload := map[string]any{
+				"action":          "deleted",
+				"uuid":            uuid,
+				"subtree_count":   subtreeCount,
+				"content_preview": preview,
+				"write_mode":      currentLLMWriteMode(),
+				"message":         "block deleted",
+			}
+			return envelopeSuccess(start, payload, withCapabilityUsed("logseq.Editor.getBlock", "logseq.Editor.removeBlock")), nil
+		}),
+	}
+}
+
+func countBlockSubtree(b *logseq.Block) int {
+	if b == nil {
+		return 0
+	}
+	count := 1
+	for i := range b.Children {
+		child := b.Children[i]
+		count += countBlockSubtree(&child)
+	}
+	return count
 }
 
 func blockSelectedCmd() *redant.Command {

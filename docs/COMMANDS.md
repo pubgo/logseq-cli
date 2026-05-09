@@ -7,6 +7,22 @@
 - 命令：`logseq`
 - 描述：Logseq CLI - command line tool for Logseq
 
+---
+
+## capabilities：LLM 能力探测
+
+### `logseq capabilities get`
+
+探测当前运行时对 LLM/MCP 关键链路的可用性，返回能力矩阵与建议提示。
+
+返回内容包含（节选）：
+
+- API：`datascript_query`、`dsl_query`、`search`、`tags_list`、`state_store`
+- 图谱：`db_graph`、`:block/tags` 可用性、`:block/refs` 可用性
+- 写策略：`LOGSEQ_LLM_WRITE_MODE`、删除确认策略、最大结果数
+
+建议在 LLM 工作流开始时先调用一次此命令，用于选择执行路径与回退策略。
+
 ### 全局参数
 
 | 参数              | 类型                | 默认值      | 环境变量           | 说明                                        |
@@ -59,6 +75,21 @@
 选项：
 
 - `-c, --content`（string）：初始块内容；传 `-` 时从 stdin 读取
+
+### `logseq page append-safe <name> <content>`
+
+安全追加块（面向 LLM 的受控写入入口）。
+
+参数：
+
+- `name`（string，必填）：页面名称
+- `content`（string，必填）：块内容（传 `-` 时从 stdin 读取）
+
+选项：
+
+- `--dry-run`（bool）：仅预览，不写入
+- `--confirm`（bool）：在 `LOGSEQ_LLM_WRITE_MODE=confirm` 时必需
+- `--idempotency-key`（string）：幂等键，避免重复写入
 
 ### `logseq page journal [date]`
 
@@ -211,6 +242,19 @@
 
 - `uuid`（string，必填）：块 UUID
 
+### `logseq block delete-safe <uuid>`
+
+安全删除块（先预览影响，再确认执行）。
+
+参数：
+
+- `uuid`（string，必填）：块 UUID
+
+选项：
+
+- `--dry-run`（bool）：仅预览，不删除
+- `--confirm`（bool）：危险删除确认（默认策略下必需）
+
 ### `logseq block move <src-uuid> <target-uuid>`
 
 移动块。
@@ -350,6 +394,31 @@
 参数：
 
 - `query`（string，必填）：搜索关键词
+
+---
+
+## search-notes：LLM 友好检索（分页）
+
+### `logseq search-notes <query>`
+
+面向 LLM 的结构化检索输出，支持分页与游标。
+
+参数：
+
+- `query`（string，必填）：搜索关键词
+
+选项：
+
+- `--tag`（string，可选）：标签过滤（文本匹配）
+- `--limit`（int，默认 `20`，最大 `200`）：分页大小
+- `--cursor`（string，可选）：游标（当前实现为 offset 字符串）
+- `--include`（string，默认 `pages,blocks`）：返回类型，支持 `pages,blocks,files`
+
+返回字段（节选）：
+
+- `items[]`：统一条目（`type/title/snippet/page/uuid`）
+- `next_cursor` / `has_more`
+- `total`
 
 ---
 
