@@ -2,7 +2,7 @@ module github.com/pubgo/logseq-cli
 
 go 1.26.1
 
-require github.com/pubgo/redant v0.4.0-beta.1
+require github.com/pubgo/redant v0.4.0
 
 require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
