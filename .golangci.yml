@@ -1,0 +1,29 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - gosec
+    - bodyclose
+    - durationcheck
+    - nilerr
+  settings:
+    gosec:
+      excludes:
+        - G107
+        - G204
+        - G304
+        - G118
+        - G702
+    errcheck:
+      exclude-functions:
+        - (net/http.ResponseWriter).Write
+        - (*encoding/json.Encoder).Encode
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

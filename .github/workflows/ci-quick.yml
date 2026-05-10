@@ -1,0 +1,48 @@
+name: ci-quick
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-quick-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quick-check:
+    name: Quick Go Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Normalize go.mod replace for CI
+        shell: bash
+        run: |
+          # Keep CI independent from developer-local absolute replace paths.
+          if grep -q '^replace .* => /' go.mod; then
+            cp go.mod go.mod.bak
+            sed '/^replace .* => \/.*/d' go.mod.bak > go.mod
+            echo "Removed local absolute replace directives from go.mod for CI run"
+          fi
+
+      - name: Run unit/build checks
+        run: go test ./...
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest

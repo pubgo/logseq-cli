@@ -1,0 +1,2319 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>logseq-cli WebUI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    .outline-tree .outline-node {
+      position: relative;
+    }
+
+    .outline-tree .outline-guides {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      pointer-events: none;
+    }
+
+    .outline-tree .outline-row {
+      position: relative;
+      border-left: 1px solid transparent;
+    }
+
+    .outline-tree .outline-row--active {
+      border-left-color: rgba(129, 140, 248, 0.8);
+      background: linear-gradient(90deg, rgba(49, 46, 129, 0.45) 0%, rgba(49, 46, 129, 0.12) 30%, rgba(15, 23, 42, 0) 58%);
+      box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.2);
+    }
+
+    .outline-tree .outline-row--todo {
+      border-left-color: rgba(251, 191, 36, 0.35);
+      background: linear-gradient(90deg, rgba(120, 53, 15, 0.22) 0%, rgba(120, 53, 15, 0.06) 24%, transparent 48%);
+    }
+
+    .outline-tree .outline-row--doing {
+      border-left-color: rgba(96, 165, 250, 0.45);
+      background: linear-gradient(90deg, rgba(30, 58, 138, 0.22) 0%, rgba(30, 58, 138, 0.06) 24%, transparent 48%);
+    }
+
+    .outline-tree .outline-row--done {
+      border-left-color: rgba(52, 211, 153, 0.38);
+      background: linear-gradient(90deg, rgba(6, 78, 59, 0.24) 0%, rgba(6, 78, 59, 0.05) 24%, transparent 48%);
+    }
+
+    .outline-tree .outline-row--cancelled {
+      border-left-color: rgba(100, 116, 139, 0.38);
+      background: linear-gradient(90deg, rgba(51, 65, 85, 0.22) 0%, rgba(51, 65, 85, 0.05) 24%, transparent 48%);
+    }
+
+    .outline-node .bullet-dot {
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    .outline-node:hover>.outline-row>.outline-bullet .bullet-dot {
+      transform: scale(1.4);
+      box-shadow: 0 0 6px rgba(99, 102, 241, 0.4);
+    }
+
+    .outline-actions {
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    .outline-preview {
+      opacity: 0;
+      max-height: 0;
+      overflow: hidden;
+      transition: opacity 0.15s, max-height 0.15s;
+    }
+
+    .outline-row:hover .outline-preview {
+      opacity: 1;
+      max-height: 2.6em;
+    }
+
+    .outline-node:hover>.outline-row .outline-actions {
+      opacity: 1;
+    }
+
+    .md-content img {
+      max-width: 100%;
+      border-radius: 6px;
+      margin: 4px 0;
+    }
+
+    .md-content ul,
+    .md-content ol {
+      padding-left: 1.2em;
+      margin: 2px 0;
+    }
+
+    .md-content li {
+      list-style: disc;
+    }
+
+    .md-content ol li {
+      list-style: decimal;
+    }
+
+    .md-content blockquote {
+      border-left: 2px solid #475569;
+      padding-left: 8px;
+      color: #94a3b8;
+      margin: 2px 0;
+    }
+
+    .md-content pre.code-block {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin: 4px 0;
+      overflow-x: auto;
+      font-size: 11px;
+    }
+
+    .md-content hr {
+      border: none;
+      border-top: 1px solid #334155;
+      margin: 6px 0;
+    }
+
+    .md-content .task-check {
+      width: 13px;
+      height: 13px;
+      margin-right: 4px;
+      vertical-align: middle;
+      accent-color: #10b981;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+
+  <div class="max-w-7xl mx-auto p-4 md:p-6 space-y-4" x-data="logseqApp()" x-init="init()"
+    @click="if($event.target.dataset.pageLink){outputPageClick($event.target.dataset.pageLink)}">
+
+    <!-- Toast -->
+    <div x-show="toast.show" x-transition.opacity.duration.300ms
+      class="fixed top-4 right-4 z-50 max-w-sm px-4 py-3 rounded-lg shadow-lg text-sm border"
+      :class="toast.ok ? 'bg-emerald-900/90 border-emerald-700 text-emerald-100' : 'bg-rose-900/90 border-rose-700 text-rose-100'"
+      x-text="toast.msg" @click="toast.show=false"></div>
+
+    <!-- Loading overlay -->
+    <div x-show="loading" class="fixed inset-0 z-40 flex items-start justify-center pt-20 pointer-events-none">
+      <div
+        class="px-4 py-2 rounded-lg bg-slate-800/90 border border-slate-600 text-sm text-slate-200 flex items-center gap-2 shadow-lg">
+        <svg class="animate-spin h-4 w-4 text-indigo-400" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+        <span x-text="loadingMsg||'加载中...'"></span>
+      </div>
+    </div>
+
+    <!-- Header -->
+    <header class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="w-2.5 h-2.5 rounded-full"
+            :class="connOk ? 'bg-emerald-400 shadow-lg shadow-emerald-400/30' : 'bg-rose-500 shadow-lg shadow-rose-500/30'">
+          </div>
+          <div>
+            <h1 class="text-lg md:text-xl font-semibold">logseq-cli WebUI</h1>
+            <p class="text-xs text-slate-500 mt-0.5">⌘K 搜索 · ⌘1-6 切换标签页 · ⌥←/⌥→ 折叠展开当前节点</p>
+          </div>
+        </div>
+        <template x-if="conn">
+          <pre class="text-xs text-slate-500 bg-slate-950 rounded px-2 py-1 border border-slate-800"
+            x-text="conn.baseURL + ' · token:' + (conn.tokenConfigured ? '✓' : '✗')"></pre>
+        </template>
+      </div>
+    </header>
+
+    <!-- Page name datalist -->
+    <datalist id="page-names">
+      <template x-for="p in pageList" :key="p.uuid||p.name">
+        <option :value="p.originalName||p.name"></option>
+      </template>
+    </datalist>
+
+    <!-- Tab Nav -->
+    <nav class="flex flex-wrap gap-1 border-b border-slate-700">
+      <template x-for="t in tabs" :key="t.key">
+        <button
+          class="px-4 py-2 text-sm rounded-t-lg border border-b-0 transition-colors cursor-pointer flex items-center gap-1.5"
+          :class="activeTab===t.key ? 'bg-slate-800 text-white border-slate-600' : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'"
+          @click="activeTab=t.key">
+          <span x-text="t.label"></span>
+          <span x-show="tabBadge(t.key)"
+            class="px-1.5 py-0.5 rounded-full text-[10px] leading-none bg-slate-700 text-slate-300"
+            x-text="tabBadge(t.key)"></span>
+        </button>
+      </template>
+    </nav>
+
+    <!-- ==================== TAB: 页面 ==================== -->
+    <div x-show="activeTab==='pages'" x-transition class="space-y-4">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        <!-- Sidebar: page list -->
+        <div class="lg:col-span-1 rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-sm">页面列表</span>
+            <button class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs"
+              @click="refreshPages()">刷新</button>
+          </div>
+          <input x-model="filter.name" @keydown.enter="refreshPages()"
+            class="w-full px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-sm" placeholder="搜索页面名..." />
+          <div class="flex gap-2">
+            <select x-model="filter.tag"
+              class="flex-1 px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-xs">
+              <option value="">全部标签</option>
+              <template x-for="t in tagList" :key="t">
+                <option :value="t" x-text="t"></option>
+              </template>
+            </select>
+            <button class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs" @click="loadTags()">刷新</button>
+          </div>
+          <details class="text-xs">
+            <summary class="cursor-pointer text-slate-400">高级过滤</summary>
+            <div class="mt-2 space-y-2">
+              <input x-model="filter.property" class="w-full px-2 py-1.5 rounded bg-slate-950 border border-slate-700"
+                placeholder="属性键" />
+              <input x-model="filter.value" class="w-full px-2 py-1.5 rounded bg-slate-950 border border-slate-700"
+                placeholder="属性值（可选）" />
+              <div class="flex items-center gap-2">
+                <select x-model="filter.mode" class="px-2 py-1.5 rounded bg-slate-950 border border-slate-700">
+                  <option value="contains">包含</option>
+                  <option value="equals">等于</option>
+                </select>
+                <label class="inline-flex items-center gap-1"><input type="checkbox"
+                    x-model="filter.includeJournal" />Journal</label>
+              </div>
+            </div>
+          </details>
+          <div class="flex gap-2">
+            <button class="px-2 py-1 rounded bg-indigo-700 hover:bg-indigo-600 text-xs"
+              @click="refreshPages()">过滤</button>
+            <button class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs"
+              @click="clearFilter();refreshPages()">清空</button>
+          </div>
+          <div class="text-xs text-slate-400" x-text="pageSummary"></div>
+          <div class="space-y-0.5 max-h-[500px] overflow-auto pr-1">
+            <template x-for="p in pageList" :key="p.uuid||p.name">
+              <button class="w-full text-left px-2 py-1.5 rounded text-sm truncate transition-colors"
+                :class="currentPage===(p.originalName||p.name) ? 'bg-indigo-800/40 text-indigo-200 border-l-2 border-indigo-400 pl-1.5' : 'hover:bg-slate-800'"
+                :title="p.originalName||p.name" @click="currentPage=p.originalName||p.name;loadPage()"
+                x-text="p.originalName||p.name||'(unnamed)'"></button>
+            </template>
+          </div>
+        </div>
+
+        <!-- Page detail -->
+        <div class="lg:col-span-2 space-y-4">
+
+          <!-- CRUD -->
+          <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+            <span class="font-semibold text-sm">页面操作</span>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+              <div class="space-y-1">
+                <label class="text-slate-400 text-xs">当前页面</label>
+                <input x-model="currentPage" @keydown.enter="loadPage()" list="page-names"
+                  class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700" placeholder="输入或选择页面" />
+              </div>
+              <div class="space-y-1">
+                <label class="text-slate-400 text-xs">新建页面名</label>
+                <input x-model="newPageName" @keydown.enter="createPage()"
+                  class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700" placeholder="回车创建" />
+              </div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button class="px-3 py-1.5 rounded bg-blue-700 hover:bg-blue-600 text-sm"
+                @click="loadPage()">加载详情</button>
+              <button class="px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600 text-sm"
+                @click="createPage()">创建页面</button>
+              <button class="px-3 py-1.5 rounded bg-emerald-700/60 hover:bg-emerald-600/60 text-sm"
+                @click="showCreateWithContent=!showCreateWithContent"
+                x-text="showCreateWithContent?'收起内容':'带内容创建'"></button>
+              <button class="px-3 py-1.5 rounded bg-rose-700 hover:bg-rose-600 text-sm"
+                @click="deletePage()">删除页面</button>
+            </div>
+
+            <!-- Create with initial content -->
+            <div x-show="showCreateWithContent" x-transition class="border-t border-slate-800 pt-3 space-y-2">
+              <span class="text-xs text-slate-400">初始内容（创建页面时附带）</span>
+              <textarea x-model="createPageContent" rows="2"
+                class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm"
+                placeholder="页面初始内容（Markdown）"></textarea>
+            </div>
+
+            <!-- Journal create -->
+            <div class="border-t border-slate-800 pt-3 space-y-2">
+              <span class="text-xs text-slate-400">创建 Journal 页面（可选日期，格式 YYYY-MM-DD）</span>
+              <div class="flex gap-2 text-sm">
+                <input x-model="journalDate" class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                  placeholder="留空=今天" />
+                <button class="px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600 text-sm"
+                  @click="createJournalPage()">创建 Journal</button>
+              </div>
+            </div>
+
+            <!-- Rename -->
+            <div class="border-t border-slate-800 pt-3 space-y-2">
+              <span class="text-xs text-slate-400">重命名</span>
+              <div class="flex gap-2 text-sm">
+                <input x-model="renameNewName" @keydown.enter="renamePage()"
+                  class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700" placeholder="新页面名 (Enter 确认)" />
+                <button class="px-3 py-1.5 rounded bg-amber-700 hover:bg-amber-600 text-sm"
+                  @click="renamePage()">重命名</button>
+              </div>
+            </div>
+
+            <!-- Refs / Props -->
+            <div class="border-t border-slate-800 pt-3 flex flex-wrap gap-2">
+              <button class="px-3 py-1.5 rounded bg-violet-700 hover:bg-violet-600 text-sm"
+                @click="pageRefs()">反向引用</button>
+              <button class="px-3 py-1.5 rounded bg-teal-700 hover:bg-teal-600 text-sm" @click="pageProps()">属性</button>
+            </div>
+
+            <!-- Namespace -->
+            <div class="border-t border-slate-800 pt-3 space-y-2">
+              <span class="text-xs text-slate-400">命名空间</span>
+              <div class="flex gap-2 text-sm">
+                <input x-model="nsInput" class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                  placeholder="命名空间前缀" />
+                <button class="px-3 py-1.5 rounded bg-sky-700 hover:bg-sky-600 text-sm"
+                  @click="pageNamespace(false)">列出</button>
+                <button class="px-3 py-1.5 rounded bg-sky-700 hover:bg-sky-600 text-sm"
+                  @click="pageNamespace(true)">树形</button>
+              </div>
+            </div>
+
+            <!-- Page props set -->
+            <div class="border-t border-slate-800 pt-3 space-y-2">
+              <span class="text-xs text-slate-400">设置页面属性（key=value 每行一个）</span>
+              <textarea x-model="pagePropsText" rows="2"
+                class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm"
+                placeholder="status=done&#10;priority=high"></textarea>
+              <button class="px-3 py-1.5 rounded bg-teal-700 hover:bg-teal-600 text-sm"
+                @click="setPageProps()">设置属性</button>
+            </div>
+          </div>
+
+          <!-- Page outline view -->
+          <div x-show="pageBlocks.length||pageDetail"
+            class="rounded-xl border border-slate-800 bg-[#0c1222] p-5 space-y-4">
+            <!-- Page title & metadata -->
+            <div class="flex items-center justify-between">
+              <div class="flex items-baseline gap-3">
+                <h2 class="font-bold text-xl text-slate-50 tracking-tight" x-text="pageDetail?.name||currentPage||''">
+                </h2>
+                <span class="text-[11px] text-slate-500 tabular-nums"
+                  x-text="pageBlocks.length?pageBlocks.length+' blocks':''"></span>
+              </div>
+              <div class="flex items-center gap-2 flex-wrap justify-end">
+                <button
+                  class="text-xs px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700/50 text-slate-400 hover:text-slate-200 transition-colors"
+                  @click="collapseAllOutline()">折叠全部</button>
+                <button
+                  class="text-xs px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700/50 text-slate-400 hover:text-slate-200 transition-colors"
+                  @click="expandAllOutline()">展开全部</button>
+                <button class="text-xs px-2.5 py-1 rounded-md border transition-colors"
+                  :class="outlineCompact ? 'bg-indigo-900/50 border-indigo-700 text-indigo-200' : 'bg-slate-800 border-slate-700/50 text-slate-400 hover:text-slate-200 hover:bg-slate-700'"
+                  @click="toggleOutlineCompact()" x-text="outlineCompact?'宽松':'紧凑'"></button>
+                <button class="text-xs px-2.5 py-1 rounded-md border transition-colors"
+                  :class="outlineHideEmpty ? 'bg-cyan-900/50 border-cyan-700 text-cyan-200' : 'bg-slate-800 border-slate-700/50 text-slate-400 hover:text-slate-200 hover:bg-slate-700'"
+                  @click="toggleOutlineHideEmpty()" x-text="outlineHideEmpty?'显示空行':'隐藏空行'"></button>
+                <button
+                  class="text-xs px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700/50 text-slate-400 hover:text-slate-200 transition-colors"
+                  @click="loadPage()">↻</button>
+                <button
+                  class="text-xs px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700/50 text-slate-400 hover:text-slate-200 transition-colors"
+                  @click="pageBlocks=[];pageDetail=null">收起</button>
+              </div>
+            </div>
+
+            <!-- Page properties -->
+            <template x-if="pageDetail?.properties?.length">
+              <div class="rounded-lg bg-slate-900/80 border border-slate-800/60 px-4 py-3">
+                <div class="grid gap-1">
+                  <template x-for="([pk,pv]) in pageDetail.properties" :key="pk">
+                    <div class="flex items-baseline gap-2 text-xs">
+                      <span class="text-teal-400/90 font-mono font-medium min-w-[80px]" x-text="pk"></span>
+                      <span class="text-slate-600">→</span>
+                      <span class="text-slate-300" x-text="Array.isArray(pv)?pv.join(', '):String(pv)"></span>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+
+            <!-- Outline blocks -->
+            <div class="max-h-[600px] overflow-auto outline-tree pr-1"
+              style="scrollbar-width:thin;scrollbar-color:#334155 transparent">
+              <template x-for="b in visiblePageBlocks()" :key="outlineBlockKey(b)">
+                <div class="outline-node" :style="'padding-left:'+(b.level||0)*22+'px'">
+                  <div class="outline-guides" :style="outlineGuidesStyle(b.level||0)"></div>
+                  <div
+                    class="outline-row flex items-start gap-0 rounded-md px-1 -mx-1 hover:bg-slate-800/30 transition-colors"
+                    :class="[outlineRowClass(b), isOutlineActive(b) ? 'outline-row--active' : '']"
+                    @click="setOutlineActive(b)">
+                    <!-- Fold toggle -->
+                    <div class="shrink-0 mt-[6px] mr-1 w-10 flex items-center gap-1 justify-start">
+                      <button x-show="b.hasChildren"
+                        class="text-xs text-slate-500 hover:text-slate-200 transition-colors cursor-pointer"
+                        @click="toggleOutlineCollapse(b)" x-text="isOutlineCollapsed(b)?'▸':'▾'"></button>
+                      <span x-show="b.hasChildren && outlineDescendantCount(b)"
+                        class="text-[10px] leading-none px-1 py-0.5 rounded bg-slate-800/90 text-slate-400 border border-slate-700/70"
+                        x-text="outlineDescendantCount(b)"></span>
+                    </div>
+                    <!-- Bullet -->
+                    <div class="outline-bullet shrink-0 mt-[9px] mr-2 flex items-center justify-center w-4">
+                      <template x-if="b.marker==='TODO'">
+                        <span
+                          class="bullet-dot w-[15px] h-[15px] rounded-[3px] border-[1.5px] border-amber-400/70 inline-block cursor-pointer hover:border-amber-300"
+                          title="TODO"></span>
+                      </template>
+                      <template x-if="b.marker==='DOING'">
+                        <span
+                          class="bullet-dot w-[15px] h-[15px] rounded-[3px] border-2 border-blue-400 bg-blue-400/10 inline-block"
+                          title="DOING"></span>
+                      </template>
+                      <template x-if="b.marker==='DONE'">
+                        <span
+                          class="bullet-dot w-[15px] h-[15px] rounded-[3px] bg-emerald-500/30 border-[1.5px] border-emerald-400/70 inline-flex items-center justify-center"
+                          title="DONE">
+                          <svg class="w-2.5 h-2.5 text-emerald-300" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor" stroke-width="3">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        </span>
+                      </template>
+                      <template x-if="b.marker==='LATER'||b.marker==='WAIT'||b.marker==='WAITING'">
+                        <span
+                          class="bullet-dot w-[15px] h-[15px] rounded-[3px] border-[1.5px] border-orange-400/50 inline-flex items-center justify-center text-[8px] text-orange-300/70 font-bold"
+                          :title="b.marker" x-text="b.marker[0]"></span>
+                      </template>
+                      <template x-if="b.marker==='CANCELLED'">
+                        <span
+                          class="bullet-dot w-[15px] h-[15px] rounded-[3px] border-[1.5px] border-slate-600 bg-slate-800 inline-flex items-center justify-center text-[9px] text-slate-500"
+                          title="CANCELLED">✕</span>
+                      </template>
+                      <template x-if="!b.marker||b.marker===''||b.marker==='NOW'">
+                        <span class="bullet-dot w-[5px] h-[5px] rounded-full bg-slate-400/60 inline-block"></span>
+                      </template>
+                    </div>
+                    <!-- Content -->
+                    <div class="flex-1 min-w-0" :class="outlineCompact ? 'py-0.5' : 'py-1.5'">
+                      <div class="md-content text-[13px] leading-[1.7] text-slate-200/90 break-words"
+                        :class="{'line-through opacity-50': b.marker==='DONE'||b.marker==='CANCELLED'}"
+                        x-html="renderMd(b.content)||'<span class=\'text-slate-600 italic text-xs\'>(空)</span>'"></div>
+                      <template x-if="isOutlineCollapsed(b) && b.descendantPreview">
+                        <div class="outline-preview text-[11px] text-slate-500 mt-0.5 truncate"
+                          x-text="b.descendantPreview"></div>
+                      </template>
+                      <!-- Priority badge -->
+                      <template x-if="b.priority">
+                        <span
+                          class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md mt-1 font-medium"
+                          :class="b.priority==='A'?'bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/20':b.priority==='B'?'bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/20':'bg-slate-500/15 text-slate-400 ring-1 ring-slate-500/20'">
+                          <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path
+                              d="M3.5 2.75a.75.75 0 00-1.5 0v14.5a.75.75 0 001.5 0v-4.392l1.657-.348a6.449 6.449 0 014.271.572 7.948 7.948 0 005.965.524l2.078-.64A.75.75 0 0018 12.25v-8.5a.75.75 0 00-.904-.734l-2.38.501a7.25 7.25 0 01-4.186-.363l-.502-.2a8.75 8.75 0 00-5.053-.439l-1.475.31V2.75z" />
+                          </svg>
+                          <span x-text="b.priority"></span>
+                        </span>
+                      </template>
+                      <!-- Hover actions -->
+                      <div class="outline-actions flex items-center gap-1 mt-0.5">
+                        <code
+                          class="text-[10px] text-slate-600 cursor-pointer hover:text-indigo-400 font-mono transition-colors"
+                          @click="copyUUID(b.uuid)" :title="'复制 '+b.uuid" x-text="b.uuid?.slice(0,8)"></code>
+                        <button
+                          class="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-800/80 hover:bg-indigo-900/50 text-slate-500 hover:text-indigo-300 border border-transparent hover:border-indigo-800/50 transition-all"
+                          @click="fillBlockUUID(b.uuid)">→块</button>
+                        <button
+                          class="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-800/80 hover:bg-emerald-900/50 text-slate-500 hover:text-emerald-300 border border-transparent hover:border-emerald-800/50 transition-all"
+                          @click="block.insertTarget=b.uuid;activeTab='blocks'">+子</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+
+            <!-- Empty state -->
+            <template x-if="pageDetail && !pageBlocks.length">
+              <div class="text-center py-8 text-slate-500 text-sm">此页面暂无内容块</div>
+            </template>
+          </div>
+
+          <!-- Append / Prepend -->
+          <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+            <span class="font-semibold text-sm">追加内容到页面</span>
+            <textarea x-model="appendText" rows="3"
+              class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm"
+              placeholder="块内容（Markdown）"></textarea>
+            <div class="flex gap-2">
+              <button class="px-3 py-1.5 rounded bg-cyan-700 hover:bg-cyan-600 text-sm"
+                @click="appendBlock()">追加到页尾</button>
+              <button class="px-3 py-1.5 rounded bg-cyan-700 hover:bg-cyan-600 text-sm"
+                @click="prependBlock()">插入到页首</button>
+              <label class="inline-flex items-center gap-1 text-xs text-slate-400">
+                <input type="checkbox" x-model="autoRefreshBlocks" />
+                追加后刷新块树
+              </label>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== TAB: 块 ==================== -->
+    <div x-show="activeTab==='blocks'" x-transition class="space-y-4">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        <!-- Get block -->
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <span class="font-semibold text-sm">获取块</span>
+          <div class="flex gap-2 text-sm">
+            <input x-model="block.getUUID" @keydown.enter="getBlock()"
+              class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700" placeholder="块 UUID (Enter 获取)" />
+            <label class="inline-flex items-center gap-1 text-xs"><input type="checkbox"
+                x-model="block.getChildren" />子块</label>
+            <button class="px-3 py-1.5 rounded bg-blue-700 hover:bg-blue-600" @click="getBlock()">获取</button>
+          </div>
+          <!-- Block preview after get -->
+          <template x-if="blockPreview">
+            <div class="rounded border border-slate-800 bg-slate-950/60 p-2 space-y-1">
+              <div class="text-xs text-slate-400">块预览</div>
+              <div class="text-sm text-slate-200 whitespace-pre-wrap break-words" x-text="blockPreview.content||'(空)'">
+              </div>
+              <div class="flex gap-2 mt-1">
+                <button class="text-[10px] px-2 py-0.5 rounded bg-amber-700 hover:bg-amber-600"
+                  @click="block.updateUUID=blockPreview.uuid;block.updateContent=blockPreview.content">→编辑</button>
+                <button class="text-[10px] px-2 py-0.5 rounded bg-emerald-700 hover:bg-emerald-600"
+                  @click="block.insertTarget=blockPreview.uuid">→插入子块</button>
+                <code class="text-[10px] text-slate-500 cursor-pointer hover:text-indigo-300"
+                  @click="copyUUID(blockPreview.uuid)" x-text="blockPreview.uuid"></code>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Block utils -->
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <span class="font-semibold text-sm">块快捷操作</span>
+          <div class="flex flex-wrap gap-2 text-sm">
+            <button class="px-3 py-1.5 rounded bg-blue-700 hover:bg-blue-600" @click="getCurrentBlock()">当前焦点块</button>
+            <button class="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600"
+              @click="getSelectedBlocks()">当前选中块</button>
+            <button class="px-3 py-1.5 rounded bg-rose-700 hover:bg-rose-600"
+              @click="clearSelectedBlocks()">清空选中</button>
+            <button class="px-3 py-1.5 rounded bg-teal-700 hover:bg-teal-600" @click="newBlockUUID()">生成 UUID</button>
+          </div>
+          <div class="flex gap-2 text-sm">
+            <input x-model="block.siblingUUID" class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700"
+              placeholder="块 UUID（查询前后兄弟）" />
+            <button class="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600" @click="getPrevSibling()">前兄弟</button>
+            <button class="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600" @click="getNextSibling()">后兄弟</button>
+          </div>
+        </div>
+
+        <!-- Insert block -->
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <span class="font-semibold text-sm">插入块</span>
+          <div class="grid grid-cols-1 gap-2 text-sm">
+            <input x-model="block.insertTarget" class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
+              placeholder="目标块 UUID" />
+            <textarea x-model="block.insertContent" rows="2"
+              class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700" placeholder="块内容"></textarea>
+            <div class="flex gap-2">
+              <label class="inline-flex items-center gap-1 text-xs"><input type="checkbox"
+                  x-model="block.insertSibling" />同级</label>
+              <button class="px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600" @click="insertBlock()">插入</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Update block -->
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <span class="font-semibold text-sm">更新块</span>
+          <div class="grid grid-cols-1 gap-2 text-sm">
+            <input x-model="block.updateUUID" class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
+              placeholder="块 UUID" />
+            <textarea x-model="block.updateContent" rows="2"
+              class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700" placeholder="新内容"></textarea>
+            <div class="flex gap-2">
+              <button class="px-3 py-1.5 rounded bg-amber-700 hover:bg-amber-600" @click="updateBlock()">更新</button>
+              <button class="px-3 py-1.5 rounded bg-rose-700 hover:bg-rose-600" @click="removeBlock()">删除块</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Move block -->
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <span class="font-semibold text-sm">移动块</span>
+          <div class="grid grid-cols-1 gap-2 text-sm">
+            <input x-model="block.moveSrc" class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
+              placeholder="源块 UUID" />
+            <input x-model="block.moveTarget" class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
+              placeholder="目标块 UUID" />
+            <div class="flex gap-2">
+              <label class="inline-flex items-center gap-1 text-xs"><input type="checkbox"
+                  x-model="block.moveBefore" />移到前面</label>
+              <button class="px-3 py-1.5 rounded bg-amber-700 hover:bg-amber-600" @click="moveBlock()">移动</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Block property -->
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <span class="font-semibold text-sm">块属性</span>
+          <div class="grid grid-cols-1 gap-2 text-sm">
+            <input x-model="block.propUUID" class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700"
+              placeholder="块 UUID" />
+            <div class="flex gap-2">
+              <input x-model="block.propKey" class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                placeholder="属性键" />
+              <input x-model="block.propValue" class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                placeholder="属性值" />
+            </div>
+            <div class="flex gap-2">
+              <button class="px-3 py-1.5 rounded bg-blue-700 hover:bg-blue-600" @click="getBlockProps()">获取属性</button>
+              <button class="px-3 py-1.5 rounded bg-teal-700 hover:bg-teal-600" @click="setBlockProp()">设置</button>
+              <button class="px-3 py-1.5 rounded bg-rose-700 hover:bg-rose-600" @click="removeBlockProp()">删除</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Block collapse -->
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <span class="font-semibold text-sm">折叠/展开块</span>
+          <div class="flex gap-2 text-sm">
+            <input x-model="block.collapseUUID" class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700"
+              placeholder="块 UUID" />
+            <button class="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600" @click="collapseBlock(true)">折叠</button>
+            <button class="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600"
+              @click="collapseBlock(false)">展开</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ==================== TAB: 搜索 ==================== -->
+    <div x-show="activeTab==='search'" x-transition class="space-y-4">
+      <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+        <span class="font-semibold text-sm">全文搜索</span>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm">
+          <input x-model="searchQ" @keydown.enter="doSearch()"
+            class="md:col-span-2 px-3 py-2 rounded bg-slate-950 border border-slate-700"
+            placeholder="关键词，支持多词(空格=AND) / 引号短语" />
+          <input x-model="searchTag" class="px-3 py-2 rounded bg-slate-950 border border-slate-700"
+            placeholder="标签过滤（可选）" />
+          <button class="px-3 py-2 rounded bg-violet-700 hover:bg-violet-600" @click="doSearch()">搜索</button>
+        </div>
+        <div class="text-xs text-slate-400">示例：<code>golang logseq</code>（同时包含） / <code>"outline mode" render</code>（短语
+          + 关键词）</div>
+      </div>
+
+      <!-- Structured search results -->
+      <div x-show="searchResults.length" class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <span class="font-semibold text-sm">搜索结果 <span class="text-slate-400 font-normal"
+              x-text="'('+searchResults.length+' 条)'"></span></span>
+          <button class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600"
+            @click="searchResults=[]">清空</button>
+        </div>
+        <div class="space-y-1 max-h-[500px] overflow-auto">
+          <template x-for="(r,i) in searchResults" :key="i">
+            <div
+              class="rounded border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm hover:bg-slate-800/60 cursor-pointer"
+              @click="searchResultClick(r)">
+              <div class="flex items-center gap-2">
+                <span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded"
+                  :class="r.type==='page'?'bg-blue-900 text-blue-300':'bg-purple-900 text-purple-300'"
+                  x-text="r.type==='page'?'页面':'块'"></span>
+                <span class="font-medium truncate" x-text="r.title||r.content||'(无标题)'"></span>
+              </div>
+              <template x-if="r.snippet">
+                <div class="text-xs text-slate-400 mt-1 line-clamp-2" x-text="r.snippet"></div>
+              </template>
+              <template x-if="r.uuid">
+                <code class="text-[10px] text-slate-500 mt-1 block" x-text="r.uuid"></code>
+              </template>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== TAB: 标签 ==================== -->
+    <div x-show="activeTab==='tags'" x-transition class="space-y-4">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        <!-- Tag list -->
+        <div class="lg:col-span-1 rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-sm">标签列表</span>
+            <button class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs"
+              @click="refreshTagTab()">刷新</button>
+          </div>
+          <input x-model="tagFilter" @input="filterTagList()"
+            class="w-full px-2 py-1.5 rounded bg-slate-950 border border-slate-700 text-sm" placeholder="过滤标签名..." />
+          <div class="text-xs text-slate-400"
+            x-text="'共 '+tagListAll.length+' 个标签'+(tagFilter?' · 匹配 '+tagListFiltered.length:'')">
+          </div>
+          <div class="space-y-0.5 max-h-[500px] overflow-auto pr-1">
+            <template x-for="t in tagListFiltered" :key="t">
+              <button
+                class="w-full text-left px-2 py-1.5 rounded text-sm truncate flex items-center justify-between group"
+                :class="selectedTag===t ? 'bg-indigo-800/40 text-indigo-200' : 'hover:bg-slate-800'" :title="t"
+                @click="selectTag(t)">
+                <span x-text="t"></span>
+                <span class="text-xs text-slate-500 group-hover:text-slate-300">#</span>
+              </button>
+            </template>
+          </div>
+        </div>
+
+        <!-- Tag detail: pages with this tag -->
+        <div class="lg:col-span-2 space-y-4">
+          <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="font-semibold text-sm">
+                <template x-if="selectedTag"><span>标签: <span class="text-indigo-300" x-text="selectedTag"></span>
+                    下的页面</span></template>
+                <template x-if="!selectedTag"><span>请选择一个标签</span></template>
+              </span>
+              <template x-if="selectedTag">
+                <button class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs"
+                  @click="loadTagPages()">刷新</button>
+              </template>
+            </div>
+            <template x-if="selectedTag">
+              <div class="space-y-2">
+                <div class="text-xs text-slate-400" x-text="'共 '+tagPages.length+' 个页面'"></div>
+                <div class="space-y-1 max-h-[450px] overflow-auto">
+                  <template x-for="p in tagPages" :key="p.uuid||p.name">
+                    <div
+                      class="flex items-center justify-between rounded border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm hover:bg-slate-800/60">
+                      <span class="truncate" x-text="p.originalName||p.name||'(unnamed)'"></span>
+                      <div class="flex gap-1 shrink-0 ml-2">
+                        <button class="px-2 py-0.5 rounded bg-blue-700 hover:bg-blue-600 text-xs"
+                          @click="currentPage=p.originalName||p.name;activeTab='pages';loadPage()">查看</button>
+                        <button class="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-xs"
+                          @click="tagPageDetail(p)">详情</button>
+                      </div>
+                    </div>
+                  </template>
+                  <template x-if="selectedTag && !tagPages.length">
+                    <div class="text-xs text-slate-400 py-4 text-center">该标签下没有页面</div>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-4">
+            <span class="font-semibold text-sm">标签 / 属性增强操作</span>
+
+            <div class="space-y-2 border-b border-slate-800 pb-3">
+              <div class="text-xs text-slate-400">标签创建 / 查询 / 对象</div>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+                <input x-model="tagOps.createName" class="px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                  placeholder="新标签名" />
+                <input x-model="tagOps.createUUID" class="px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                  placeholder="可选 UUID" />
+                <button class="px-3 py-2 rounded bg-emerald-700 hover:bg-emerald-600"
+                  @click="createTagAdvanced()">创建标签</button>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm">
+                <input x-model="tagOps.queryNameOrID"
+                  class="md:col-span-2 px-3 py-2 rounded bg-slate-950 border border-slate-700" placeholder="标签名或实体ID" />
+                <button class="px-3 py-2 rounded bg-blue-700 hover:bg-blue-600" @click="tagGet()">获取标签</button>
+                <button class="px-3 py-2 rounded bg-blue-700 hover:bg-blue-600" @click="tagSearch()">搜索标签</button>
+              </div>
+              <div class="flex gap-2 text-sm">
+                <button class="px-3 py-2 rounded bg-indigo-700 hover:bg-indigo-600"
+                  @click="tagObjects()">获取标签对象块</button>
+              </div>
+            </div>
+
+            <div class="space-y-2 border-b border-slate-800 pb-3">
+              <div class="text-xs text-slate-400">标签关系操作（property / extends）</div>
+              <div class="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm">
+                <select x-model="tagOps.relationAction" class="px-3 py-2 rounded bg-slate-950 border border-slate-700">
+                  <option value="add">add</option>
+                  <option value="remove">remove</option>
+                </select>
+                <input x-model="tagOps.relationTagID" class="px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                  placeholder="tag-id" />
+                <input x-model="tagOps.relationTarget" class="px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                  placeholder="target (property/parent-tag)" />
+                <div class="flex gap-2">
+                  <button class="flex-1 px-2 py-2 rounded bg-teal-700 hover:bg-teal-600"
+                    @click="tagPropertyRelation()">property</button>
+                  <button class="flex-1 px-2 py-2 rounded bg-teal-700 hover:bg-teal-600"
+                    @click="tagExtendsRelation()">extends</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="space-y-2 border-b border-slate-800 pb-3">
+              <div class="text-xs text-slate-400">块标签关系（block-tag）</div>
+              <div class="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm">
+                <select x-model="tagOps.blockAction" class="px-3 py-2 rounded bg-slate-950 border border-slate-700">
+                  <option value="add">add</option>
+                  <option value="remove">remove</option>
+                </select>
+                <input x-model="tagOps.blockID" class="px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                  placeholder="block-id" />
+                <input x-model="tagOps.blockTagID" class="px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                  placeholder="tag-id" />
+                <button class="px-3 py-2 rounded bg-amber-700 hover:bg-amber-600"
+                  @click="tagBlockRelation()">执行</button>
+              </div>
+            </div>
+
+            <div class="space-y-2">
+              <div class="text-xs text-slate-400">属性 schema（property）</div>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+                <input x-model="propertyOps.key" class="px-3 py-2 rounded bg-slate-950 border border-slate-700"
+                  placeholder="属性 key" />
+                <button class="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600" @click="propertyList()">列出全部</button>
+                <button class="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600" @click="propertyGet()">查询 key</button>
+              </div>
+              <div class="flex gap-2 text-sm">
+                <select x-model="selectedPropertySchemaPreset"
+                  class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700">
+                  <option value="">选择属性模板</option>
+                  <template x-for="p in propertySchemaPresets" :key="p.key">
+                    <option :value="p.key" x-text="p.key + ' · ' + p.label"></option>
+                  </template>
+                </select>
+                <button class="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600"
+                  @click="applyPropertySchemaPreset()">填充模板</button>
+              </div>
+              <textarea x-model="propertyOps.schemaText" rows="2"
+                class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm font-mono"
+                placeholder='schema json, 例如: {"type":"default","cardinality":"one","public":true}'></textarea>
+              <div class="flex gap-2 text-sm">
+                <button class="px-3 py-2 rounded bg-emerald-700 hover:bg-emerald-600"
+                  @click="propertyUpsert()">upsert</button>
+                <button class="px-3 py-2 rounded bg-rose-700 hover:bg-rose-600"
+                  @click="propertyRemove()">remove</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ==================== TAB: 查询 ==================== -->
+    <div x-show="activeTab==='query'" x-transition class="space-y-4">
+      <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+        <span class="font-semibold text-sm">Datalog / DSL 查询</span>
+        <textarea x-model="queryText" rows="5" @keydown.ctrl.enter="runDatalog()" @keydown.meta.enter="runDatalog()"
+          class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm font-mono"
+          placeholder="[:find ?p :where [?b :block/name ?p]]  (⌘Enter 执行 Datalog)"></textarea>
+
+        <!-- Query history -->
+        <div x-show="queryHistory.length" class="rounded border border-slate-800 bg-slate-950/60 p-3 space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="text-xs text-slate-300">最近查询</div>
+            <button class="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 hover:bg-slate-600"
+              @click="queryHistory=[]">清空</button>
+          </div>
+          <div class="flex flex-wrap gap-1">
+            <template x-for="(qh,qi) in queryHistory" :key="qi">
+              <button class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-mono truncate max-w-[200px]"
+                @click="queryText=qh" :title="qh" x-text="qh.slice(0,40)+(qh.length>40?'...':'')"></button>
+            </template>
+          </div>
+        </div>
+
+        <div class="rounded border border-slate-800 bg-slate-950/60 p-3 space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="text-xs text-slate-300">查询示例</div>
+            <div class="inline-flex rounded border border-slate-700 overflow-hidden text-xs">
+              <button class="px-2 py-1"
+                :class="queryLang==='datalog' ? 'bg-indigo-700 text-white' : 'bg-slate-900 text-slate-400 hover:text-slate-200'"
+                @click="queryLang='datalog';exampleDesc=currentExample()?.desc||''">Datalog</button>
+              <button class="px-2 py-1"
+                :class="queryLang==='dsl' ? 'bg-indigo-700 text-white' : 'bg-slate-900 text-slate-400 hover:text-slate-200'"
+                @click="queryLang='dsl';exampleDesc=currentExample()?.desc||''">DSL</button>
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <select x-show="queryLang==='datalog'" x-model="selectedDatalogExample"
+              @change="exampleDesc=currentExample()?.desc||''"
+              class="flex-1 min-w-[200px] px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm">
+              <template x-for="e in datalogExamples" :key="e.key">
+                <option :value="e.key" x-text="e.title"></option>
+              </template>
+            </select>
+            <select x-show="queryLang==='dsl'" x-model="selectedDSLExample"
+              @change="exampleDesc=currentExample()?.desc||''"
+              class="flex-1 min-w-[200px] px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm">
+              <template x-for="e in dslExamples" :key="e.key">
+                <option :value="e.key" x-text="e.title"></option>
+              </template>
+            </select>
+            <button class="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600 text-sm"
+              @click="applyExample()">填充</button>
+            <button class="px-3 py-2 rounded bg-emerald-700 hover:bg-emerald-600 text-sm"
+              @click="applyExample();runExample()">填充并执行</button>
+          </div>
+          <div class="text-xs text-slate-400" x-text="exampleDesc"></div>
+        </div>
+
+        <div class="flex gap-2">
+          <button class="px-3 py-2 rounded bg-teal-700 hover:bg-teal-600 text-sm" @click="runDatalog()">执行 Datalog <span
+              class="text-[10px] text-teal-300/60">⌘↵</span></button>
+          <button class="px-3 py-2 rounded bg-sky-700 hover:bg-sky-600 text-sm" @click="runDSL()">执行 DSL</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== TAB: 系统 ==================== -->
+    <div x-show="activeTab==='system'" x-transition class="space-y-4">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <span class="font-semibold text-sm">连接与状态</span>
+          <div class="flex flex-wrap gap-2">
+            <button class="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-sm"
+              @click="runHealth()">健康检查</button>
+            <button class="px-3 py-1.5 rounded bg-blue-700 hover:bg-blue-600 text-sm" @click="runGraph()">Graph
+              信息</button>
+            <button class="px-3 py-1.5 rounded bg-teal-700 hover:bg-teal-600 text-sm"
+              @click="loadConn(true,true)">连接信息</button>
+            <button class="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-sm"
+              @click="runGraphConfig()">用户配置</button>
+          </div>
+          <template x-if="conn">
+            <pre class="text-xs bg-slate-950 border border-slate-800 rounded p-3 overflow-auto"
+              x-text="'baseURL : '+conn.baseURL+'\nhost    : '+conn.host+' ('+conn.hostSource+')\nport    : '+conn.port+' ('+conn.portSource+')\ntoken   : '+(conn.tokenConfigured?'已配置':'未配置')+' ('+conn.tokenSource+')'"></pre>
+          </template>
+        </div>
+
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <span class="font-semibold text-sm">Graph 增强能力</span>
+          <div class="flex flex-wrap gap-2">
+            <button class="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-sm" @click="runGraphAppInfo()">App
+              Info</button>
+            <button class="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-sm"
+              @click="runGraphUserInfo()">User Info</button>
+            <button class="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-sm"
+              @click="runGraphCurrentConfig()">Graph Config</button>
+            <button class="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-sm"
+              @click="runGraphFavorites()">Favorites</button>
+            <button class="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-sm"
+              @click="runGraphRecent()">Recent</button>
+            <button class="px-3 py-1.5 rounded bg-indigo-700 hover:bg-indigo-600 text-sm"
+              @click="runGraphTemplates()">Templates</button>
+            <button class="px-3 py-1.5 rounded bg-amber-700 hover:bg-amber-600 text-sm"
+              @click="runQuickSmoke()">一键轻量验证</button>
+          </div>
+          <div class="border-t border-slate-800 pt-3 space-y-2">
+            <div class="text-xs text-slate-400">State 读写</div>
+            <div class="flex gap-2">
+              <select x-model="selectedStatePreset"
+                class="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm">
+                <option value="">选择常用 state key</option>
+                <template x-for="k in stateKeyPresets" :key="k">
+                  <option :value="k" x-text="k"></option>
+                </template>
+              </select>
+              <button class="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600 text-sm"
+                @click="applyStatePreset()">填充</button>
+            </div>
+            <input x-model="graphState.key"
+              class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm"
+              placeholder="state key，例如 ui/sidebar-open?" />
+            <input x-model="graphState.value"
+              class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700 text-sm"
+              placeholder="state value（JSON 或字符串）" />
+            <div class="flex gap-2">
+              <button class="px-3 py-1.5 rounded bg-teal-700 hover:bg-teal-600 text-sm"
+                @click="runGraphStateGet()">读取</button>
+              <button class="px-3 py-1.5 rounded bg-teal-700 hover:bg-teal-600 text-sm"
+                @click="runGraphStateSet()">写入</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-sm">操作历史</span>
+            <button class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600"
+              @click="history=[];output='历史已清空'">清空</button>
+          </div>
+          <div class="space-y-2 max-h-[400px] overflow-auto">
+            <template x-if="!history.length">
+              <div class="text-xs text-slate-400">暂无</div>
+            </template>
+            <template x-for="(h,idx) in history" :key="idx">
+              <div class="rounded border border-slate-800 bg-slate-950/60 p-2 text-xs">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-medium" x-text="h.time+' · '+h.action"></span>
+                  <span class="px-1.5 py-0.5 rounded"
+                    :class="h.ok?'bg-emerald-800 text-emerald-200':'bg-rose-800 text-rose-200'"
+                    x-text="h.ok?'OK':'ERR'"></span>
+                </div>
+                <div class="text-slate-400 mt-1 font-mono" x-text="(h.req.method||'GET')+' '+h.req.url"></div>
+                <button class="mt-1 px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600"
+                  @click="replay(idx)">回放</button>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== Output ==================== -->
+    <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <span class="font-semibold text-sm">输出</span>
+          <span x-show="outputType!=='text'" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300"
+            x-text="outputTypeLabel()"></span>
+        </div>
+        <div class="flex gap-2">
+          <button x-show="outputType!=='text'" class="text-xs px-2 py-1 rounded transition-colors"
+            :class="outputRaw?'bg-slate-700 hover:bg-slate-600':'bg-indigo-700 hover:bg-indigo-600'"
+            @click="outputRaw=!outputRaw" x-text="outputRaw?'结构化视图':'原始 JSON'"></button>
+          <button class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600" @click="clearOutput()">清空</button>
+          <button class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600" @click="copyOutput()">复制</button>
+          <button class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600"
+            @click="downloadOutput()">下载</button>
+        </div>
+      </div>
+
+      <!-- Raw JSON / plain text -->
+      <pre x-show="outputRaw || outputType==='text'"
+        class="text-xs bg-slate-950 border border-slate-800 rounded p-3 overflow-auto max-h-[500px] whitespace-pre-wrap break-words"
+        x-text="output"></pre>
+
+      <!-- ── Structured: Properties (key-value) ── -->
+      <div x-show="!outputRaw && outputType==='properties'" class="overflow-auto max-h-[500px]">
+        <table class="w-full text-sm">
+          <template x-for="e in outputEntries()" :key="e.key">
+            <tr class="border-b border-slate-800/60">
+              <td class="py-1.5 pr-4 text-slate-400 font-mono text-xs whitespace-nowrap align-top" x-text="e.key"></td>
+              <td class="py-1.5 text-slate-200 text-xs break-all">
+                <template x-if="e.isUUID"><code class="cursor-pointer hover:text-indigo-300" @click="copyUUID(e.value)"
+                    x-text="e.value"></code></template>
+                <template x-if="!e.isUUID"><span x-text="e.value"></span></template>
+              </td>
+            </tr>
+          </template>
+        </table>
+      </div>
+
+      <!-- ── Structured: Query result table ── -->
+      <div x-show="!outputRaw && outputType==='query'" class="overflow-auto max-h-[500px]">
+        <div class="text-xs text-slate-400 mb-2" x-text="(outputObj||[]).length+' 行结果'"></div>
+        <table class="w-full text-sm border-collapse">
+          <tbody>
+            <template x-for="(row,ri) in (outputObj||[])" :key="ri">
+              <tr class="border-b border-slate-800/60 hover:bg-slate-800/30">
+                <td class="py-1 pr-2 text-slate-500 text-[10px] w-6 text-right align-top" x-text="ri+1"></td>
+                <template x-for="(cell,ci) in (Array.isArray(row)?row:[row])" :key="ci">
+                  <td class="py-1 px-2 text-slate-200 font-mono text-xs break-all"
+                    x-text="typeof cell==='object'?JSON.stringify(cell):String(cell)"></td>
+                </template>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ── Structured: String list ── -->
+      <div x-show="!outputRaw && outputType==='string-list'" class="overflow-auto max-h-[500px]">
+        <div class="text-xs text-slate-400 mb-2" x-text="(outputObj||[]).length+' 项'"></div>
+        <div class="flex flex-wrap gap-1.5">
+          <template x-for="(s,i) in (outputObj||[])" :key="i">
+            <span
+              class="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-xs text-slate-200 cursor-pointer hover:bg-slate-700 hover:text-white transition-colors"
+              @click="outputPageClick(s)" x-text="s"></span>
+          </template>
+        </div>
+      </div>
+
+      <!-- ── Structured: Page list ── -->
+      <div x-show="!outputRaw && outputType==='page-list'" class="overflow-auto max-h-[500px] space-y-1">
+        <div class="text-xs text-slate-400 mb-2" x-text="(outputObj||[]).length+' 个页面'"></div>
+        <template x-for="(p,i) in (outputObj||[])" :key="i">
+          <div
+            class="flex items-center justify-between rounded border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm hover:bg-slate-800/40">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-blue-900 text-blue-300">页面</span>
+              <span class="truncate" x-text="p.originalName||p.name||'(unnamed)'"></span>
+            </div>
+            <div class="flex items-center gap-2 shrink-0 ml-2">
+              <button class="px-2 py-0.5 rounded bg-blue-700 hover:bg-blue-600 text-xs"
+                @click="outputPageClick(p.originalName||p.name)">查看</button>
+              <template x-if="p.uuid"><code class="text-[10px] text-slate-500 cursor-pointer hover:text-indigo-300"
+                  @click="copyUUID(p.uuid)" x-text="(p.uuid||'').slice(0,8)+'…'"></code></template>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- ── Structured: Block list ── -->
+      <div x-show="!outputRaw && outputType==='block-list'" class="overflow-auto max-h-[500px] space-y-1">
+        <div class="text-xs text-slate-400 mb-2" x-text="(outputObj||[]).length+' 个块'"></div>
+        <template x-for="(b,i) in (outputObj||[])" :key="i">
+          <div class="rounded border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm">
+            <div class="text-slate-200 text-xs whitespace-pre-wrap break-words"
+              x-text="(b.content||b['block/content']||'(空)').slice(0,200)"></div>
+            <div class="flex items-center gap-2 mt-1">
+              <code class="text-[10px] text-slate-500 cursor-pointer hover:text-indigo-300"
+                @click="copyUUID(b.uuid||b['block/uuid'])" x-text="(b.uuid||b['block/uuid']||'').slice(0,8)+'…'"></code>
+              <template x-if="b.marker||b['block/marker']"><span
+                  class="text-[10px] px-1 rounded bg-amber-900 text-amber-300"
+                  x-text="b.marker||b['block/marker']"></span></template>
+              <button class="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 hover:bg-slate-600"
+                @click="fillBlockUUID(b.uuid||b['block/uuid'])">→块操作</button>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- ── Structured: Page detail ── -->
+      <div x-show="!outputRaw && outputType==='page-detail'" class="overflow-auto max-h-[500px]">
+        <div class="rounded border border-slate-800 bg-slate-950/60 p-3 space-y-3">
+          <div class="flex items-center gap-2">
+            <span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-blue-900 text-blue-300">页面</span>
+            <span class="font-medium text-base"
+              x-text="outputObj?.originalName||outputObj?.name||outputObj?.['block/name']||outputObj?.['original-name']||''"></span>
+          </div>
+          <table class="w-full text-xs">
+            <template x-for="e in outputDetailEntries()" :key="e.key">
+              <tr class="border-b border-slate-800/40">
+                <td class="py-1 pr-3 text-slate-400 font-mono whitespace-nowrap align-top" x-text="e.key"></td>
+                <td class="py-1 text-slate-200 break-all">
+                  <template x-if="e.isUUID"><code class="cursor-pointer hover:text-indigo-300"
+                      @click="copyUUID(e.value)" x-text="e.value"></code></template>
+                  <template x-if="!e.isUUID"><span x-text="e.value"></span></template>
+                </td>
+              </tr>
+            </template>
+          </table>
+          <div class="flex gap-2">
+            <button class="text-xs px-2 py-0.5 rounded bg-blue-700 hover:bg-blue-600"
+              @click="outputPageClick(outputObj?.originalName||outputObj?.name||'')">查看页面</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Structured: Block detail ── -->
+      <div x-show="!outputRaw && outputType==='block-detail'" class="overflow-auto max-h-[500px]">
+        <div class="rounded border border-slate-800 bg-slate-950/60 p-3 space-y-3">
+          <div class="flex items-center gap-2">
+            <span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-purple-900 text-purple-300">块</span>
+            <code class="text-xs text-slate-400 cursor-pointer hover:text-indigo-300"
+              @click="copyUUID(outputObj?.uuid||outputObj?.['block/uuid'])"
+              x-text="outputObj?.uuid||outputObj?.['block/uuid']||''"></code>
+          </div>
+          <div class="bg-slate-900 rounded p-2 text-sm text-slate-200 whitespace-pre-wrap break-words"
+            x-text="outputObj?.content||outputObj?.['block/content']||'(空)'"></div>
+          <table class="w-full text-xs">
+            <template x-for="e in outputDetailEntries()" :key="e.key">
+              <tr class="border-b border-slate-800/40">
+                <td class="py-1 pr-3 text-slate-400 font-mono whitespace-nowrap align-top" x-text="e.key"></td>
+                <td class="py-1 text-slate-200 break-all">
+                  <template x-if="e.isUUID"><code class="cursor-pointer hover:text-indigo-300"
+                      @click="copyUUID(e.value)" x-text="e.value"></code></template>
+                  <template x-if="!e.isUUID"><span x-text="e.value"></span></template>
+                </td>
+              </tr>
+            </template>
+          </table>
+          <div class="flex gap-2">
+            <button class="text-xs px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600"
+              @click="fillBlockUUID(outputObj?.uuid||outputObj?.['block/uuid'])">→块操作</button>
+            <button class="text-xs px-2 py-0.5 rounded bg-amber-700 hover:bg-amber-600"
+              @click="block.updateUUID=outputObj?.uuid||outputObj?.['block/uuid'];block.updateContent=outputObj?.content||outputObj?.['block/content']||''">→编辑</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Structured: Generic array ── -->
+      <div x-show="!outputRaw && outputType==='array'" class="overflow-auto max-h-[500px] space-y-1">
+        <div class="text-xs text-slate-400 mb-2" x-text="(outputObj||[]).length+' 项'"></div>
+        <template x-for="(item,i) in (outputObj||[])" :key="i">
+          <div class="rounded border border-slate-800 bg-slate-950/60 px-3 py-2">
+            <pre class="whitespace-pre-wrap break-words text-xs text-slate-200"
+              x-text="typeof item==='object'?JSON.stringify(item,null,2):String(item)"></pre>
+          </div>
+        </template>
+      </div>
+    </div>
+
+  </div><!-- end x-data -->
+
+  <script>
+    function logseqApp() {
+      return {
+        activeTab: 'pages',
+        tabs: [
+          { key: 'pages', label: '页面' }, { key: 'blocks', label: '块' },
+          { key: 'search', label: '搜索' }, { key: 'tags', label: '标签' }, { key: 'query', label: '查询' }, { key: 'system', label: '系统' },
+        ],
+        conn: null,
+        connOk: false,
+        output: '(暂无)',
+        outputObj: null,
+        outputType: 'text',
+        outputRaw: false,
+        loading: false,
+        loadingMsg: '',
+        toast: { show: false, ok: true, msg: '' },
+        history: [],
+        pageList: [],
+        pageBlocks: [],
+        pageDetail: null,
+        blockPreview: null,
+        searchResults: [],
+        showCreateWithContent: false,
+        createPageContent: '',
+        journalDate: '',
+        autoRefreshBlocks: true,
+        queryHistory: [],
+        tagList: [],
+        pageSummary: '',
+        currentPage: '',
+        newPageName: '',
+        renameNewName: '',
+        nsInput: '',
+        pagePropsText: '',
+        appendText: '',
+        filter: { name: '', tag: '', property: '', value: '', mode: 'contains', includeJournal: true },
+        block: {
+          getUUID: '', getChildren: false,
+          insertTarget: '', insertContent: '', insertSibling: false,
+          updateUUID: '', updateContent: '',
+          moveSrc: '', moveTarget: '', moveBefore: false,
+          propUUID: '', propKey: '', propValue: '',
+          collapseUUID: '',
+          siblingUUID: '',
+        },
+        searchQ: '', searchTag: '',
+        tagFilter: '', tagListAll: [], tagListFiltered: [], selectedTag: '', tagPages: [],
+        graphState: { key: '', value: '' },
+        selectedStatePreset: '',
+        stateKeyPresets: [
+          'ui/sidebar-open?',
+          'ui/right-sidebar-open?',
+          'document/mode?',
+          'editor/editing?',
+          'ui/theme',
+        ],
+        tagOps: {
+          createName: '', createUUID: '', queryNameOrID: '',
+          relationAction: 'add', relationTagID: '', relationTarget: '',
+          blockAction: 'add', blockID: '', blockTagID: '',
+        },
+        propertyOps: { key: '', schemaText: '' },
+        selectedPropertySchemaPreset: '',
+        propertySchemaPresets: [
+          { key: 'status', label: '状态字符串', schema: { type: 'default', cardinality: 'one', public: true } },
+          { key: 'priority', label: '优先级字符串', schema: { type: 'default', cardinality: 'one', public: true } },
+          { key: 'estimate', label: '数值', schema: { type: 'number', cardinality: 'one', public: true } },
+          { key: 'tags', label: '多值标签', schema: { type: 'default', cardinality: 'many', public: true } },
+        ],
+        outlineCollapsed: {},
+        outlineCompact: false,
+        outlineHideEmpty: false,
+        outlineActive: '',
+        queryText: '',
+        queryLang: 'datalog',
+        selectedDatalogExample: 'page-all',
+        selectedDSLExample: 'dsl-todo',
+        exampleDesc: '',
+        datalogExamples: [
+          { key: 'page-all', title: '所有页面名', desc: '验证查询链路', query: '[:find ?name :where [?p :block/name ?name]]' },
+          { key: 'page-journal', title: 'Journal 页面名', desc: '列出 Journal 名称（结果量取决于图谱）', query: '[:find ?name :where [?p :block/name ?name] [?p :block/journal? true]]' },
+          { key: 'page-with-status', title: '包含 status 属性的页面', desc: '用于元数据清点', query: '[:find ?name :where [?p :block/name ?name] [?p :block/properties ?props] [(get ?props :status) ?status]]' },
+          { key: 'todo', title: 'TODO 块', desc: '标记为 TODO 的任务', query: '[:find ?content :where [?b :block/marker "TODO"] [?b :block/content ?content]]' },
+          { key: 'doing', title: 'DOING 块', desc: '进行中的任务', query: '[:find ?content :where [?b :block/marker "DOING"] [?b :block/content ?content]]' },
+          { key: 'priority-a', title: 'A 优先级', desc: '高优先级任务', query: '[:find ?content :where [?b :block/priority "A"] [?b :block/content ?content]]' },
+          { key: 'block-with-deadline', title: '含 deadline 的块', desc: '筛查时间相关任务', query: '[:find ?content ?deadline :where [?b :block/content ?content] [?b :block/properties ?props] [(get ?props :deadline) ?deadline]]' },
+          { key: 'tagged', title: '带标签/引用的块', desc: '兼容查询：通过 refs 返回标签或页面引用块', query: '[:find ?content ?ref :where [?b :block/content ?content] [?b :block/refs ?r] [?r :block/name ?ref]]' },
+          { key: 'ref-page', title: '引用页面的块', desc: '通过 refs 反查块内容', query: '[:find ?content ?page :where [?b :block/content ?content] [?b :block/refs ?r] [?r :block/name ?page]]' },
+          { key: 'recent', title: '最近更新块', desc: '查看更新时间字段（排序/截断取决于版本）', query: '[:find ?content ?updated :where [?b :block/content ?content] [?b :block/updated-at ?updated]]' },
+          { key: 'long-blocks', title: '长文本块', desc: '按文本长度筛选（阈值 120）', query: '[:find ?content :where [?b :block/content ?content] [(count ?content) ?len] [(> ?len 120)] ]' },
+        ],
+        dslExamples: [
+          { key: 'dsl-todo', title: '任务：TODO/DOING', desc: 'DSL 包装示例（兼容回退为 Datalog）', query: '{:query [:find (pull ?b [*]) :where [?b :block/marker ?m] [(contains? #{"TODO" "DOING"} ?m)]]}' },
+          { key: 'dsl-priority', title: '高优先级任务', desc: '筛选 priority A/B（DSL 包装）', query: '{:query [:find (pull ?b [*]) :where [?b :block/priority ?p] [(contains? #{"A" "B"} ?p)]]}' },
+          { key: 'dsl-page-by-name', title: '页面名模糊匹配', desc: '按页面名关键词筛选（DSL 包装）', query: '{:query [:find (pull ?p [*]) :where [?p :block/name ?name] [(clojure.string/includes? ?name "project")]]}' },
+          { key: 'dsl-updated', title: '更新时间字段示例', desc: '查询更新时间字段（排序/截断取决于版本）', query: '{:query [:find (pull ?b [*]) :where [?b :block/updated-at ?u]]}' },
+        ],
+
+        async init() {
+          this.exampleDesc = this.currentExample()?.desc || '';
+          await Promise.all([this.loadConn(false), this.loadTags(false), this.refreshPages(false)]);
+          // Keyboard shortcuts
+          document.addEventListener('keydown', (e) => {
+            const isMod = e.metaKey || e.ctrlKey;
+            if (isMod && e.key === 'k') { e.preventDefault(); this.activeTab = 'search'; this.$nextTick(() => document.querySelector('[x-model="searchQ"]')?.focus()); }
+            if (isMod && e.key >= '1' && e.key <= '6') { e.preventDefault(); const t = this.tabs[parseInt(e.key) - 1]; if (t) this.activeTab = t.key; }
+            if (!isMod && this.activeTab === 'pages' && e.altKey && e.key === 'ArrowLeft') {
+              e.preventDefault();
+              this.collapseActiveOutlineNode();
+            }
+            if (!isMod && this.activeTab === 'pages' && e.altKey && e.key === 'ArrowRight') {
+              e.preventDefault();
+              this.expandActiveOutlineNode();
+            }
+          });
+        },
+
+        print(d) {
+          this.output = typeof d === 'string' ? d : JSON.stringify(d, null, 2);
+          if (d == null || typeof d !== 'object') { this.outputObj = null; this.outputType = 'text'; }
+          else { this.outputObj = d; this.outputType = this.detectOutputType(d); }
+        },
+        detectOutputType(d) {
+          if (Array.isArray(d)) {
+            if (!d.length) return 'text';
+            if (Array.isArray(d[0])) return 'query';
+            if (typeof d[0] === 'string') return 'string-list';
+            const f = d[0];
+            if (f.name || f.originalName || f['block/name']) return 'page-list';
+            if ((f.uuid || f['block/uuid']) && (f.content !== undefined || f['block/content'] !== undefined)) return 'block-list';
+            return 'array';
+          }
+          if (typeof d === 'object' && d !== null) {
+            if ((d.uuid || d['block/uuid']) && (d.content !== undefined || d['block/content'] !== undefined)) return 'block-detail';
+            if (d.name || d.originalName || d['block/name'] || d['original-name']) return 'page-detail';
+            return 'properties';
+          }
+          return 'text';
+        },
+        outputTypeLabel() {
+          const m = { properties: '属性', query: '查询结果', 'string-list': '列表', 'page-list': '页面列表', 'block-list': '块列表', 'page-detail': '页面详情', 'block-detail': '块详情', array: '数组' };
+          return m[this.outputType] || '';
+        },
+        outputEntries() {
+          if (!this.outputObj || typeof this.outputObj !== 'object' || Array.isArray(this.outputObj)) return [];
+          return Object.entries(this.outputObj).map(([k, v]) => {
+            let display = Array.isArray(v) ? '[' + v.length + ' 项]' : (v != null && typeof v === 'object') ? JSON.stringify(v) : String(v ?? '');
+            if (display.length > 300) display = display.slice(0, 300) + '…';
+            return { key: k, value: display, isUUID: /uuid/i.test(k) && typeof v === 'string' && /^[0-9a-f-]{8,}$/i.test(v) };
+          });
+        },
+        outputDetailEntries() {
+          if (!this.outputObj || typeof this.outputObj !== 'object') return [];
+          const skip = new Set(['children', 'block/children', 'content', 'block/content', 'name', 'originalName', 'original-name', 'block/name']);
+          return Object.entries(this.outputObj).filter(([k, v]) => !skip.has(k) && v != null && v !== '').map(([k, v]) => {
+            let display = Array.isArray(v) ? '[' + v.length + ' 项]' : (v != null && typeof v === 'object') ? JSON.stringify(v) : String(v ?? '');
+            if (display.length > 300) display = display.slice(0, 300) + '…';
+            return { key: k, value: display, isUUID: /uuid/i.test(k) && typeof v === 'string' && /^[0-9a-f-]{8,}$/i.test(v) };
+          });
+        },
+        clearOutput() { this.output = '(暂无)'; this.outputObj = null; this.outputType = 'text'; },
+        outputPageClick(name) { if (!name) return; this.currentPage = name; this.activeTab = 'pages'; this.loadPage(); },
+        renderMd(text) {
+          if (!text) return '';
+          // Strip marker prefix (TODO, DONE etc.)
+          let s = text.replace(/^(TODO|DOING|DONE|LATER|NOW|WAIT|WAITING|CANCELLED)\s+/, '');
+          s = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          // Multi-line code blocks ```
+          s = s.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="code-block"><code>$2</code></pre>');
+          // Headings
+          s = s.replace(/^(#{1,6})\s+(.+)$/m, (_, h, t) => {
+            const sz = [1.3, 1.15, 1.05, 0.95, 0.88, 0.82][h.length - 1] || 0.82;
+            return '<span class="font-semibold text-slate-100 block" style="font-size:' + sz + 'rem;line-height:1.4">' + t + '</span>';
+          });
+          // Horizontal rule
+          s = s.replace(/^---+$/gm, '<hr/>');
+          // Block quote lines
+          s = s.replace(/^&gt;\s?(.*)$/gm, '<blockquote>$1</blockquote>');
+          // Properties: key:: value
+          s = s.replace(/^([a-zA-Z_][\w-]*)::\s*(.*)$/gm, '<span class="inline-flex items-baseline gap-1 text-[11px]"><span class="text-teal-400/80 font-mono">$1</span><span class="text-slate-700">::</span><span class="text-slate-400">$2</span></span>');
+          // Checkbox items
+          s = s.replace(/^- \[x\]\s+(.*)$/gm, '<div class="flex items-start gap-1"><input type="checkbox" checked disabled class="task-check"/><span class="line-through text-slate-500">$1</span></div>');
+          s = s.replace(/^- \[ \]\s+(.*)$/gm, '<div class="flex items-start gap-1"><input type="checkbox" disabled class="task-check"/><span>$1</span></div>');
+          // Unordered list
+          s = s.replace(/^[-*]\s+(.+)$/gm, '<li>$1</li>');
+          s = s.replace(/(<li>.*<\/li>\n?)+/g, m => '<ul>' + m + '</ul>');
+          // Inline: images before links
+          s = s.replace(/!\[([^\]]*)\]\(([^)]+?)\)/g, '<img src="$2" alt="$1" loading="lazy"/>');
+          // Inline
+          s = s.replace(/~~(.+?)~~/g, '<del class="text-slate-500">$1</del>');
+          s = s.replace(/\*\*(.+?)\*\*/g, '<strong class="text-slate-100 font-semibold">$1</strong>');
+          s = s.replace(/(?<![*\w])\*([^*]+?)\*(?![*\w])/g, '<em class="text-slate-300">$1</em>');
+          s = s.replace(/`([^`]+?)`/g, '<code class="px-1 py-0.5 rounded bg-slate-800/80 text-pink-300/90 text-[11px] font-mono">$1</code>');
+          // Logseq wikilinks
+          s = s.replace(/\[\[([^\]]+?)\]\]/g, '<span class="text-blue-400 hover:text-blue-300 hover:underline cursor-pointer transition-colors" data-page-link="$1">$1</span>');
+          // Tags
+          s = s.replace(/(^|\s)#([\w\u4e00-\u9fff/-]+)/g, '$1<span class="inline-flex items-center px-1.5 py-0 rounded-full bg-indigo-500/10 text-indigo-400/90 text-[11px] ring-1 ring-indigo-500/20">#$2</span>');
+          // Standard markdown links
+          s = s.replace(/\[([^\]]+?)\]\(([^)]+?)\)/g, '<a class="text-blue-400 hover:text-blue-300 hover:underline transition-colors" href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+          // Newlines
+          s = s.replace(/\n/g, '<br/>');
+          return s;
+        },
+        now() { return new Date().toLocaleTimeString('zh-CN', { hour12: false }); },
+        showToast(msg, ok = true) {
+          this.toast = { show: true, ok, msg };
+          setTimeout(() => this.toast.show = false, ok ? 2000 : 4000);
+        },
+        tabBadge(key) {
+          if (key === 'pages') return this.pageList.length || '';
+          if (key === 'tags') return this.tagListAll.length || '';
+          return '';
+        },
+        copyUUID(uuid) {
+          if (!uuid) return;
+          navigator.clipboard.writeText(uuid).then(() => this.showToast('UUID 已复制: ' + uuid.slice(0, 8) + '...'));
+        },
+        fillBlockUUID(uuid) {
+          this.block.getUUID = uuid;
+          this.block.updateUUID = uuid;
+          this.block.propUUID = uuid;
+          this.block.collapseUUID = uuid;
+          this.showToast('UUID 已填入块操作区');
+        },
+        outlineBlockKey(b) {
+          if (b?.uuid) return 'uuid:' + b.uuid;
+          return 'idx:' + String(b?._idx ?? '');
+        },
+        outlineStateKey(pageName = '') {
+          const name = String(pageName || this.pageDetail?.name || this.currentPage || '').trim();
+          if (!name) return '';
+          return 'logseq-webui:outline:' + encodeURIComponent(name.toLowerCase());
+        },
+        outlineGuidesStyle(level) {
+          const lv = Math.max(0, Number(level) || 0);
+          if (!lv) return 'display:none;';
+          const width = lv * 22;
+          return 'width:' + width + 'px;background-image:repeating-linear-gradient(to right, transparent 0, transparent 20px, rgba(71,85,105,0.45) 20px, rgba(71,85,105,0.45) 21px);';
+        },
+        outlineRowClass(b) {
+          const marker = String(b?.marker || '').toUpperCase();
+          if (marker === 'TODO') return 'outline-row--todo';
+          if (marker === 'DOING' || marker === 'NOW') return 'outline-row--doing';
+          if (marker === 'DONE') return 'outline-row--done';
+          if (marker === 'CANCELLED') return 'outline-row--cancelled';
+          return '';
+        },
+        outlineDescendantCount(b) {
+          return Number(b?.descendantCount || 0);
+        },
+        isOutlineEmpty(b) {
+          const text = String(b?.content || '').trim();
+          const marker = String(b?.marker || '').trim();
+          return text === '' && marker === '';
+        },
+        isOutlineActive(b) {
+          return this.outlineActive !== '' && this.outlineActive === this.outlineBlockKey(b);
+        },
+        setOutlineActive(b) {
+          this.outlineActive = this.outlineBlockKey(b);
+        },
+        getOutlineActiveBlock() {
+          if (this.outlineActive) {
+            const active = this.pageBlocks.find(x => this.outlineBlockKey(x) === this.outlineActive);
+            if (active) return active;
+          }
+          const first = this.visiblePageBlocks()[0] || null;
+          if (first) this.outlineActive = this.outlineBlockKey(first);
+          return first;
+        },
+        collapseActiveOutlineNode() {
+          const b = this.getOutlineActiveBlock();
+          if (!b || !b.hasChildren) return;
+          if (!this.isOutlineCollapsed(b)) {
+            this.toggleOutlineCollapse(b);
+          }
+        },
+        expandActiveOutlineNode() {
+          const b = this.getOutlineActiveBlock();
+          if (!b || !b.hasChildren) return;
+          if (this.isOutlineCollapsed(b)) {
+            this.toggleOutlineCollapse(b);
+          }
+        },
+        saveOutlinePrefs() {
+          const key = this.outlineStateKey();
+          if (!key) return;
+          const payload = {
+            collapsed: this.outlineCollapsed || {},
+            compact: !!this.outlineCompact,
+            hideEmpty: !!this.outlineHideEmpty,
+          };
+          try {
+            localStorage.setItem(key, JSON.stringify(payload));
+          } catch (_) {
+            // ignore browser storage errors
+          }
+        },
+        restoreOutlinePrefs() {
+          this.outlineCollapsed = {};
+          this.outlineHideEmpty = false;
+          this.outlineActive = '';
+          const key = this.outlineStateKey();
+          if (!key) return;
+          try {
+            const raw = localStorage.getItem(key);
+            if (!raw) return;
+            const payload = JSON.parse(raw);
+            if (payload && typeof payload === 'object') {
+              if (payload.collapsed && typeof payload.collapsed === 'object' && !Array.isArray(payload.collapsed)) {
+                this.outlineCollapsed = payload.collapsed;
+              }
+              if (typeof payload.compact === 'boolean') {
+                this.outlineCompact = payload.compact;
+              }
+              if (typeof payload.hideEmpty === 'boolean') {
+                this.outlineHideEmpty = payload.hideEmpty;
+              }
+            }
+          } catch (_) {
+            // ignore invalid json / storage errors
+          }
+        },
+        isOutlineCollapsed(b) {
+          return !!this.outlineCollapsed[this.outlineBlockKey(b)];
+        },
+        toggleOutlineCollapse(b) {
+          const key = this.outlineBlockKey(b);
+          this.outlineCollapsed = {
+            ...this.outlineCollapsed,
+            [key]: !this.outlineCollapsed[key],
+          };
+          this.saveOutlinePrefs();
+        },
+        collapseAllOutline() {
+          const next = {};
+          for (const b of this.pageBlocks) {
+            if (b?.hasChildren) next[this.outlineBlockKey(b)] = true;
+          }
+          this.outlineCollapsed = next;
+          this.saveOutlinePrefs();
+        },
+        expandAllOutline() {
+          this.outlineCollapsed = {};
+          this.saveOutlinePrefs();
+        },
+        toggleOutlineCompact() {
+          this.outlineCompact = !this.outlineCompact;
+          this.saveOutlinePrefs();
+        },
+        toggleOutlineHideEmpty() {
+          this.outlineHideEmpty = !this.outlineHideEmpty;
+          this.saveOutlinePrefs();
+        },
+        visiblePageBlocks() {
+          const out = [];
+          const hiddenLevels = [];
+
+          for (const b of this.pageBlocks) {
+            while (hiddenLevels.length && (b.level || 0) <= hiddenLevels[hiddenLevels.length - 1]) {
+              hiddenLevels.pop();
+            }
+
+            if (hiddenLevels.length) {
+              continue;
+            }
+
+            if (this.outlineHideEmpty && this.isOutlineEmpty(b) && !b.hasChildren) {
+              continue;
+            }
+
+            out.push(b);
+            if (b.hasChildren && this.isOutlineCollapsed(b)) {
+              hiddenLevels.push(b.level || 0);
+            }
+          }
+
+          return out;
+        },
+        applyStatePreset() {
+          if (!this.selectedStatePreset) return;
+          this.graphState.key = this.selectedStatePreset;
+          this.showToast('已填充 state key: ' + this.selectedStatePreset);
+        },
+        applyPropertySchemaPreset() {
+          if (!this.selectedPropertySchemaPreset) return;
+          const preset = this.propertySchemaPresets.find(p => p.key === this.selectedPropertySchemaPreset);
+          if (!preset) return;
+          this.propertyOps.key = preset.key;
+          this.propertyOps.schemaText = JSON.stringify(preset.schema, null, 2);
+          this.showToast('已填充属性模板: ' + preset.key);
+        },
+        async runQuickSmoke() {
+          const req = { method: 'CUSTOM', url: '/api/quick-smoke' };
+          await this.run('一键轻量验证', req, async () => {
+            const summary = { ok: true, warn: false, checks: [] };
+            const checks = [
+              ['health', '/api/health'],
+              ['graph', '/api/graph'],
+              ['graph-config', '/api/graph/config'],
+              ['tags', '/api/tags'],
+              ['properties', '/api/property/list'],
+            ];
+
+            for (const [name, url] of checks) {
+              try {
+                const data = await this.api(url);
+                const count = Array.isArray(data) ? data.length : undefined;
+                summary.checks.push({ name, ok: true, count });
+              } catch (e) {
+                const msg = String(e?.message || e || 'unknown error');
+                const unsupported = /MethodNotExist/i.test(msg);
+                if (unsupported) {
+                  summary.warn = true;
+                  summary.checks.push({ name, ok: true, warn: true, error: msg });
+                  continue;
+                }
+
+                summary.ok = false;
+                summary.checks.push({ name, ok: false, error: msg });
+              }
+            }
+
+            if (summary.warn) {
+              summary.note = '部分接口在当前 Logseq 版本不可用，已按兼容告警处理';
+            }
+            return summary;
+          });
+        },
+        addHistory(action, req, ok, result) {
+          this.history.unshift({ time: this.now(), action, req, ok, result });
+          if (this.history.length > 30) this.history.length = 30;
+        },
+
+        async api(url, opts = {}) {
+          const resp = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...opts });
+          const body = await resp.json().catch(() => ({ ok: false, error: 'invalid response' }));
+          if (!resp.ok || body.ok === false) {
+            const err = body.error || 'request failed (' + resp.status + ')';
+            throw new Error(typeof err === 'string' ? err : JSON.stringify(err));
+          }
+          return body.data;
+        },
+
+        async run(action, req, fn) {
+          this.loading = true; this.loadingMsg = action + '...';
+          try { const d = await fn(); this.print(d); this.addHistory(action, req, true, d); this.showToast(action + ' ✓'); return d; }
+          catch (e) { this.print(action + '失败: ' + e.message); this.addHistory(action, req, false, e.message); this.showToast(action + ' 失败', false); return null; }
+          finally { this.loading = false; this.loadingMsg = ''; }
+        },
+
+        async replay(idx) {
+          const h = this.history[idx]; if (!h) return;
+          const req = h.req; const opts = {};
+          if ((req.method || 'GET') !== 'GET') { opts.method = req.method; opts.body = req.body || ''; }
+          await this.run(h.action + '（回放）', req, () => this.api(req.url, opts));
+        },
+
+        copyOutput() { navigator.clipboard.writeText(this.output).then(() => this.showToast('已复制到剪贴板')).catch(() => { }); },
+
+        downloadOutput() {
+          const blob = new Blob([this.output], { type: 'application/json' });
+          const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+          a.download = 'logseq-output-' + Date.now() + '.json'; a.click();
+          URL.revokeObjectURL(a.href);
+        },
+
+        async loadConn(record = true, toPrint = false) {
+          const req = { method: 'GET', url: '/api/connection' };
+          try {
+            const d = await this.api(req.url); this.conn = d; this.connOk = true;
+            if (toPrint) this.print(d); if (record) this.addHistory('连接信息', req, true, d);
+          } catch (e) { this.connOk = false; if (record) this.addHistory('连接信息', req, false, e.message); }
+        },
+
+        async loadTags(record = true) {
+          const req = { method: 'GET', url: '/api/tags' };
+          try {
+            const tags = await this.api(req.url); this.tagList = tags || [];
+            this.tagListAll = (tags || []).sort(); this.filterTagList();
+            if (record) this.addHistory('刷新标签', req, true, { count: this.tagList.length });
+          } catch (e) { if (record) this.addHistory('刷新标签', req, false, e.message); }
+        },
+
+        hasFilter() { const f = this.filter; return !!(f.tag || f.name || f.property || !f.includeJournal); },
+        clearFilter() { this.filter = { name: '', tag: '', property: '', value: '', mode: 'contains', includeJournal: true }; },
+        filterURL() {
+          const f = this.filter; const p = new URLSearchParams();
+          if (f.tag) p.set('tag', f.tag); if (f.name) p.set('name', f.name);
+          if (f.property) p.set('property', f.property); if (f.value) p.set('value', f.value);
+          p.set('mode', f.mode); p.set('includeJournal', String(f.includeJournal));
+          return '/api/pages/filter?' + p.toString();
+        },
+
+        async refreshPages(record = true) {
+          const useF = this.hasFilter();
+          const req = { method: 'GET', url: useF ? this.filterURL() : '/api/pages' };
+          await this.run(useF ? '过滤页面' : '刷新页面', req, async () => {
+            const data = await this.api(req.url);
+            const pages = useF ? (data?.items || []) : (data || []);
+            this.pageList = pages.sort((a, b) => (a.originalName || a.name || '').localeCompare(b.originalName || b.name || ''));
+            const total = useF ? Number(data?.total || pages.length) : pages.length;
+            const filtered = useF ? Number(data?.filteredTotal || pages.length) : pages.length;
+            this.pageSummary = useF ? '已过滤: ' + filtered + '/' + total : '共 ' + total + ' 页';
+            return { total, filtered };
+          });
+        },
+
+        async loadPage() {
+          if (!this.currentPage) { this.print('请输入页面名'); return; }
+          const req = { method: 'GET', url: '/api/page?name=' + encodeURIComponent(this.currentPage) };
+          const d = await this.run('加载页面', req, () => this.api(req.url));
+          if (d) this.parsePageBlocks(d);
+        },
+
+        parsePageBlocks(data) {
+          this.pageBlocks = [];
+          this.pageDetail = null;
+          this.outlineCollapsed = {};
+          this.outlineActive = '';
+          if (!data) return;
+
+          // API returns { page: {...}, blocks: [...] }
+          const pageObj = data.page || null;
+          let blockData = data.blocks || null;
+
+          // Extract page-level metadata
+          if (pageObj && typeof pageObj === 'object') {
+            const props = pageObj.properties || pageObj['block/properties'] || null;
+            this.pageDetail = {
+              name: pageObj.originalName || pageObj.name || pageObj['block/name'] || pageObj['original-name'] || '',
+              uuid: pageObj.uuid || pageObj['block/uuid'] || '',
+              properties: props && typeof props === 'object' && !Array.isArray(props) ? Object.entries(props) : [],
+            };
+          } else if (data && !Array.isArray(data) && !blockData) {
+            // Fallback: data itself is a page object
+            const props = data.properties || data['block/properties'] || null;
+            this.pageDetail = {
+              name: data.originalName || data.name || data['block/name'] || data['original-name'] || '',
+              uuid: data.uuid || data['block/uuid'] || '',
+              properties: props && typeof props === 'object' && !Array.isArray(props) ? Object.entries(props) : [],
+            };
+          }
+
+          const walk = (blocks, level) => {
+            if (!Array.isArray(blocks)) return;
+            for (const b of blocks) {
+              this.pageBlocks.push({
+                uuid: b.uuid || b.id,
+                content: b.content || b['block/content'] || '',
+                marker: b.marker || b['block/marker'] || '',
+                priority: b.priority || b['block/priority'] || '',
+                level,
+              });
+              if (b.children) walk(b.children, level + 1);
+              else if (b['block/children']) walk(b['block/children'], level + 1);
+            }
+          };
+
+          // Determine block source
+          if (blockData) walk(blockData, 0);
+          else if (Array.isArray(data)) walk(data, 0);
+          else if (data?.children) walk(data.children, 0);
+          else if (data?.['block/children']) walk(data['block/children'], 0);
+
+          for (let i = 0; i < this.pageBlocks.length; i++) {
+            const cur = this.pageBlocks[i];
+            cur._idx = i;
+            let count = 0;
+            let preview = '';
+            for (let j = i + 1; j < this.pageBlocks.length; j++) {
+              if ((this.pageBlocks[j].level || 0) <= (cur.level || 0)) break;
+              count++;
+              if (!preview) {
+                const line = String(this.pageBlocks[j].content || '').trim();
+                if (line) preview = line;
+              }
+            }
+            cur.descendantCount = count;
+            cur.hasChildren = count > 0;
+            cur.descendantPreview = preview.length > 120 ? preview.slice(0, 120) + '…' : preview;
+          }
+
+          this.restoreOutlinePrefs();
+        },
+
+        async createPage() {
+          if (!this.newPageName) { this.print('请输入页面名'); return; }
+          const body = { name: this.newPageName };
+          if (this.createPageContent.trim()) body.content = this.createPageContent;
+          const req = { method: 'POST', url: '/api/page', body: JSON.stringify(body) };
+          const d = await this.run('创建页面', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+          if (d) { this.currentPage = this.newPageName; this.newPageName = ''; this.createPageContent = ''; this.showCreateWithContent = false; this.refreshPages(false); }
+        },
+
+        async createJournalPage() {
+          const req = { method: 'POST', url: '/api/page/journal', body: JSON.stringify({ date: this.journalDate }) };
+          const d = await this.run('创建 Journal', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+          if (d) {
+            this.currentPage = d.originalName || d.name || this.currentPage;
+            this.refreshPages(false);
+            if (this.currentPage) this.loadPage();
+          }
+        },
+
+        async deletePage() {
+          if (!this.currentPage || !confirm('确认删除: ' + this.currentPage + ' ?')) return;
+          const req = { method: 'DELETE', url: '/api/page?name=' + encodeURIComponent(this.currentPage) };
+          await this.run('删除页面', req, () => this.api(req.url, { method: 'DELETE' }));
+          this.currentPage = ''; this.pageBlocks = []; this.refreshPages(false);
+        },
+
+        async renamePage() {
+          if (!this.currentPage || !this.renameNewName) { this.print('需要当前页面名和新名'); return; }
+          const req = { method: 'POST', url: '/api/page/rename', body: JSON.stringify({ oldName: this.currentPage, newName: this.renameNewName }) };
+          const d = await this.run('重命名', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+          if (d) { this.currentPage = this.renameNewName; this.refreshPages(false); }
+        },
+
+        async pageRefs() {
+          if (!this.currentPage) { this.print('请选择页面'); return; }
+          const req = { method: 'GET', url: '/api/page/refs?name=' + encodeURIComponent(this.currentPage) };
+          await this.run('反向引用', req, () => this.api(req.url));
+        },
+
+        async pageProps() {
+          if (!this.currentPage) { this.print('请选择页面'); return; }
+          const req = { method: 'GET', url: '/api/page/properties?name=' + encodeURIComponent(this.currentPage) };
+          await this.run('页面属性', req, () => this.api(req.url));
+        },
+
+        async setPageProps() {
+          if (!this.currentPage || !this.pagePropsText.trim()) { this.print('需要页面名和属性'); return; }
+          const props = {};
+          for (const line of this.pagePropsText.split('\n')) {
+            const idx = line.indexOf('='); if (idx < 1) continue;
+            props[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+          }
+          if (!Object.keys(props).length) { this.print('无有效属性'); return; }
+          const req = { method: 'POST', url: '/api/page/properties', body: JSON.stringify({ name: this.currentPage, properties: props }) };
+          await this.run('设置属性', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async pageNamespace(tree) {
+          const ns = this.nsInput || this.currentPage;
+          if (!ns) { this.print('请输入命名空间'); return; }
+          const req = { method: 'GET', url: '/api/page/namespace?name=' + encodeURIComponent(ns) + (tree ? '&tree=true' : '') };
+          await this.run('命名空间', req, () => this.api(req.url));
+        },
+
+        async appendBlock() {
+          if (!this.currentPage || !this.appendText.trim()) { this.print('需要页面名和内容'); return; }
+          const req = { method: 'POST', url: '/api/block/append', body: JSON.stringify({ page: this.currentPage, content: this.appendText }) };
+          const d = await this.run('追加块', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+          if (d?.uuid) { this.block.updateUUID = d.uuid; this.appendText = ''; }
+          if (d && this.autoRefreshBlocks) this.loadPage();
+        },
+
+        async prependBlock() {
+          if (!this.currentPage || !this.appendText.trim()) { this.print('需要页面名和内容'); return; }
+          const req = { method: 'POST', url: '/api/block/prepend', body: JSON.stringify({ page: this.currentPage, content: this.appendText }) };
+          const d = await this.run('插入页首', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+          if (d?.uuid) { this.block.updateUUID = d.uuid; this.appendText = ''; }
+          if (d && this.autoRefreshBlocks) this.loadPage();
+        },
+
+        async getBlock() {
+          if (!this.block.getUUID) { this.print('请输入UUID'); return; }
+          const req = { method: 'GET', url: '/api/block?uuid=' + encodeURIComponent(this.block.getUUID) + '&children=' + this.block.getChildren };
+          const d = await this.run('获取块', req, () => this.api(req.url));
+          if (d) {
+            this.blockPreview = { uuid: d.uuid || this.block.getUUID, content: d.content || d['block/content'] || '' };
+          }
+        },
+
+        async getCurrentBlock() {
+          const req = { method: 'GET', url: '/api/block/current' };
+          const d = await this.run('当前焦点块', req, () => this.api(req.url));
+          if (d?.uuid) {
+            this.fillBlockUUID(d.uuid);
+            this.block.getUUID = d.uuid;
+          }
+        },
+
+        async getSelectedBlocks() {
+          const req = { method: 'GET', url: '/api/block/selected' };
+          const d = await this.run('当前选中块', req, () => this.api(req.url));
+          if (Array.isArray(d) && d.length && d[0]?.uuid) {
+            this.fillBlockUUID(d[0].uuid);
+          }
+        },
+
+        async clearSelectedBlocks() {
+          const req = { method: 'POST', url: '/api/block/selected/clear', body: '{}' };
+          await this.run('清空选中块', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async newBlockUUID() {
+          const req = { method: 'GET', url: '/api/block/new-uuid' };
+          const d = await this.run('生成块 UUID', req, () => this.api(req.url));
+          if (d?.uuid) {
+            this.fillBlockUUID(d.uuid);
+            this.block.insertTarget = d.uuid;
+          }
+        },
+
+        async getPrevSibling() {
+          if (!this.block.siblingUUID) { this.print('请输入块 UUID'); return; }
+          const req = { method: 'GET', url: '/api/block/prev-sibling?uuid=' + encodeURIComponent(this.block.siblingUUID) };
+          const d = await this.run('前兄弟块', req, () => this.api(req.url));
+          if (d?.uuid) this.fillBlockUUID(d.uuid);
+        },
+
+        async getNextSibling() {
+          if (!this.block.siblingUUID) { this.print('请输入块 UUID'); return; }
+          const req = { method: 'GET', url: '/api/block/next-sibling?uuid=' + encodeURIComponent(this.block.siblingUUID) };
+          const d = await this.run('后兄弟块', req, () => this.api(req.url));
+          if (d?.uuid) this.fillBlockUUID(d.uuid);
+        },
+
+        async insertBlock() {
+          if (!this.block.insertTarget || !this.block.insertContent) { this.print('需要UUID和内容'); return; }
+          const req = { method: 'POST', url: '/api/block/insert', body: JSON.stringify({ targetUUID: this.block.insertTarget, content: this.block.insertContent, sibling: this.block.insertSibling }) };
+          const d = await this.run('插入块', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+          if (d?.uuid) this.block.updateUUID = d.uuid;
+        },
+
+        async updateBlock() {
+          if (!this.block.updateUUID || !this.block.updateContent) { this.print('需要UUID和内容'); return; }
+          const req = { method: 'POST', url: '/api/block/update', body: JSON.stringify({ uuid: this.block.updateUUID, content: this.block.updateContent }) };
+          await this.run('更新块', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async removeBlock() {
+          if (!this.block.updateUUID || !confirm('确认删除块: ' + this.block.updateUUID + ' ?')) return;
+          const req = { method: 'POST', url: '/api/block/remove', body: JSON.stringify({ uuid: this.block.updateUUID }) };
+          await this.run('删除块', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async moveBlock() {
+          if (!this.block.moveSrc || !this.block.moveTarget) { this.print('需要源和目标UUID'); return; }
+          const req = { method: 'POST', url: '/api/block/move', body: JSON.stringify({ srcUUID: this.block.moveSrc, targetUUID: this.block.moveTarget, before: this.block.moveBefore }) };
+          await this.run('移动块', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async getBlockProps() {
+          if (!this.block.propUUID) { this.print('请输入UUID'); return; }
+          const req = { method: 'GET', url: '/api/block/property?uuid=' + encodeURIComponent(this.block.propUUID) };
+          await this.run('块属性', req, () => this.api(req.url));
+        },
+
+        async setBlockProp() {
+          if (!this.block.propUUID || !this.block.propKey) { this.print('需要UUID和属性键'); return; }
+          let value = this.block.propValue; try { value = JSON.parse(value); } catch (_) { }
+          const req = { method: 'POST', url: '/api/block/property', body: JSON.stringify({ uuid: this.block.propUUID, key: this.block.propKey, value, action: 'set' }) };
+          await this.run('设置块属性', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async removeBlockProp() {
+          if (!this.block.propUUID || !this.block.propKey) { this.print('需要UUID和属性键'); return; }
+          const req = { method: 'POST', url: '/api/block/property', body: JSON.stringify({ uuid: this.block.propUUID, key: this.block.propKey, action: 'remove' }) };
+          await this.run('删除块属性', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async collapseBlock(collapsed) {
+          if (!this.block.collapseUUID) { this.print('请输入UUID'); return; }
+          const req = { method: 'POST', url: '/api/block/collapse', body: JSON.stringify({ uuid: this.block.collapseUUID, collapsed }) };
+          await this.run(collapsed ? '折叠块' : '展开块', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async refreshTagTab() {
+          const req = { method: 'GET', url: '/api/tags' };
+          await this.run('刷新标签列表', req, async () => {
+            const tags = await this.api(req.url);
+            this.tagListAll = (tags || []).sort();
+            this.filterTagList();
+            this.tagList = this.tagListAll;
+            return { count: this.tagListAll.length };
+          });
+        },
+
+        filterTagList() {
+          if (!this.tagFilter) { this.tagListFiltered = this.tagListAll; return; }
+          const q = this.tagFilter.toLowerCase();
+          this.tagListFiltered = this.tagListAll.filter(t => t.toLowerCase().includes(q));
+        },
+
+        async selectTag(tag) {
+          this.selectedTag = tag;
+          await this.loadTagPages();
+        },
+
+        async loadTagPages() {
+          if (!this.selectedTag) return;
+          const req = { method: 'GET', url: '/api/pages/filter?tag=' + encodeURIComponent(this.selectedTag) + '&includeJournal=true' };
+          await this.run('标签页面', req, async () => {
+            const data = await this.api(req.url);
+            const pages = data?.items || [];
+            this.tagPages = pages.sort((a, b) => (a.originalName || a.name || '').localeCompare(b.originalName || b.name || ''));
+            return { tag: this.selectedTag, count: this.tagPages.length };
+          });
+        },
+
+        tagPageDetail(p) {
+          const req = { method: 'GET', url: '/api/page?name=' + encodeURIComponent(p.originalName || p.name) };
+          this.run('页面详情', req, () => this.api(req.url));
+        },
+
+        async createTagAdvanced() {
+          if (!this.tagOps.createName) { this.print('请输入标签名'); return; }
+          const req = {
+            method: 'POST',
+            url: '/api/tag/create',
+            body: JSON.stringify({ name: this.tagOps.createName, uuid: this.tagOps.createUUID }),
+          };
+          const d = await this.run('创建标签', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+          if (d) {
+            this.tagOps.queryNameOrID = this.tagOps.createName;
+            this.tagOps.createName = '';
+            this.tagOps.createUUID = '';
+            this.refreshTagTab();
+          }
+        },
+
+        async tagGet() {
+          if (!this.tagOps.queryNameOrID) { this.print('请输入标签名或ID'); return; }
+          const req = { method: 'GET', url: '/api/tag?nameOrID=' + encodeURIComponent(this.tagOps.queryNameOrID) };
+          await this.run('获取标签', req, () => this.api(req.url));
+        },
+
+        async tagSearch() {
+          if (!this.tagOps.queryNameOrID) { this.print('请输入搜索关键词'); return; }
+          const req = { method: 'GET', url: '/api/tag/search?name=' + encodeURIComponent(this.tagOps.queryNameOrID) };
+          await this.run('搜索标签', req, () => this.api(req.url));
+        },
+
+        async tagObjects() {
+          if (!this.tagOps.queryNameOrID) { this.print('请输入标签名'); return; }
+          const req = { method: 'GET', url: '/api/tag/objects?name=' + encodeURIComponent(this.tagOps.queryNameOrID) };
+          await this.run('标签对象块', req, () => this.api(req.url));
+        },
+
+        async tagPropertyRelation() {
+          if (!this.tagOps.relationTagID || !this.tagOps.relationTarget) { this.print('请输入 tag-id 和 target'); return; }
+          const req = {
+            method: 'POST',
+            url: '/api/tag/property',
+            body: JSON.stringify({ action: this.tagOps.relationAction, tagID: this.tagOps.relationTagID, target: this.tagOps.relationTarget }),
+          };
+          await this.run('标签属性关系', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async tagExtendsRelation() {
+          if (!this.tagOps.relationTagID || !this.tagOps.relationTarget) { this.print('请输入 tag-id 和 target'); return; }
+          const req = {
+            method: 'POST',
+            url: '/api/tag/extends',
+            body: JSON.stringify({ action: this.tagOps.relationAction, tagID: this.tagOps.relationTagID, target: this.tagOps.relationTarget }),
+          };
+          await this.run('标签继承关系', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async tagBlockRelation() {
+          if (!this.tagOps.blockID || !this.tagOps.blockTagID) { this.print('请输入 block-id 和 tag-id'); return; }
+          const req = {
+            method: 'POST',
+            url: '/api/tag/block',
+            body: JSON.stringify({ action: this.tagOps.blockAction, blockID: this.tagOps.blockID, tagID: this.tagOps.blockTagID }),
+          };
+          await this.run('块标签关系', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async propertyList() {
+          const req = { method: 'GET', url: '/api/property/list' };
+          await this.run('属性列表', req, () => this.api(req.url));
+        },
+
+        async propertyGet() {
+          if (!this.propertyOps.key) { this.print('请输入属性 key'); return; }
+          const req = { method: 'GET', url: '/api/property?key=' + encodeURIComponent(this.propertyOps.key) };
+          await this.run('属性详情', req, () => this.api(req.url));
+        },
+
+        async propertyUpsert() {
+          if (!this.propertyOps.key) { this.print('请输入属性 key'); return; }
+
+          let schema = null;
+          if (this.propertyOps.schemaText.trim()) {
+            try {
+              schema = JSON.parse(this.propertyOps.schemaText);
+            } catch (e) {
+              this.print('schema json 格式错误: ' + e.message);
+              return;
+            }
+          }
+
+          const req = {
+            method: 'POST',
+            url: '/api/property/upsert',
+            body: JSON.stringify({ key: this.propertyOps.key, schema }),
+          };
+          await this.run('属性 upsert', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async propertyRemove() {
+          if (!this.propertyOps.key) { this.print('请输入属性 key'); return; }
+          const req = {
+            method: 'POST',
+            url: '/api/property/remove',
+            body: JSON.stringify({ key: this.propertyOps.key }),
+          };
+          await this.run('属性 remove', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async doSearch() {
+          if (!this.searchQ) { this.print('请输入关键词'); return; }
+          const p = new URLSearchParams(); p.set('q', this.searchQ); if (this.searchTag) p.set('tag', this.searchTag);
+          const req = { method: 'GET', url: '/api/search?' + p.toString() };
+          const d = await this.run('搜索', req, () => this.api(req.url));
+          this.parseSearchResults(d);
+        },
+
+        parseSearchResults(data) {
+          this.searchResults = [];
+          if (!data) return;
+          const pages = data.pages || data.Pages || [];
+          const blocks = data.blocks || data.Blocks || [];
+          for (const p of pages) {
+            this.searchResults.push({ type: 'page', title: typeof p === 'string' ? p : (p.originalName || p.name || p['original-name'] || ''), snippet: '', uuid: '' });
+          }
+          for (const b of blocks) {
+            const content = b.content || b['block/content'] || '';
+            if (!content && !(b.uuid || b['block/uuid'])) continue; // skip empty blocks
+            const pg = typeof b.page === 'object' ? (b.page?.name || b.page?.originalName || '') : (b.page || '');
+            this.searchResults.push({ type: 'block', title: content.slice(0, 80), snippet: content.length > 80 ? content : '', uuid: b.uuid || b['block/uuid'] || '', page: pg });
+          }
+          if (!this.searchResults.length && Array.isArray(data)) {
+            for (const item of data) {
+              if (typeof item === 'string') this.searchResults.push({ type: 'page', title: item, snippet: '', uuid: '' });
+              else this.searchResults.push({ type: item.uuid ? 'block' : 'page', title: item.content || item.originalName || item.name || '', snippet: '', uuid: item.uuid || '' });
+            }
+          }
+        },
+
+        searchResultClick(r) {
+          if (r.type === 'page') {
+            this.currentPage = r.title;
+            this.activeTab = 'pages';
+            this.loadPage();
+          } else if (r.uuid) {
+            this.fillBlockUUID(r.uuid);
+            this.activeTab = 'blocks';
+            this.getBlock();
+          }
+        },
+
+        currentExample() {
+          if (this.queryLang === 'dsl') {
+            return this.dslExamples.find(e => e.key === this.selectedDSLExample) || this.dslExamples[0];
+          }
+          return this.datalogExamples.find(e => e.key === this.selectedDatalogExample) || this.datalogExamples[0];
+        },
+
+        applyExample() {
+          const e = this.currentExample(); if (!e) return;
+          this.queryText = e.query; this.exampleDesc = e.desc;
+        },
+
+        async runExample() {
+          if (this.queryLang === 'dsl') {
+            await this.runDSL();
+            return;
+          }
+          await this.runDatalog();
+        },
+
+        extractDatalogFromDSLWrapper(text) {
+          const s = String(text || '');
+          const keyIdx = s.indexOf(':query');
+          if (keyIdx < 0) return '';
+
+          const start = s.indexOf('[', keyIdx);
+          if (start < 0) return '';
+
+          let depth = 0;
+          for (let i = start; i < s.length; i++) {
+            const ch = s[i];
+            if (ch === '[') depth++;
+            if (ch === ']') {
+              depth--;
+              if (depth === 0) {
+                return s.slice(start, i + 1).trim();
+              }
+            }
+          }
+          return '';
+        },
+
+        addQueryHistory(q) {
+          this.queryHistory = [q, ...this.queryHistory.filter(x => x !== q)].slice(0, 10);
+        },
+
+        async runDatalog() {
+          if (!this.queryText) { this.print('请输入查询'); return; }
+          this.addQueryHistory(this.queryText);
+          const req = { method: 'POST', url: '/api/query/datalog', body: JSON.stringify({ query: this.queryText }) };
+          await this.run('Datalog', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+
+        async runDSL() {
+          if (!this.queryText) { this.print('请输入查询'); return; }
+
+          if (/^\s*\[/.test(this.queryText)) {
+            this.showToast('检测到 Datalog 语法，已自动切换为 Datalog 执行');
+            await this.runDatalog();
+            return;
+          }
+
+          const extracted = this.extractDatalogFromDSLWrapper(this.queryText);
+          if (extracted) {
+            this.showToast('检测到 DSL 包装查询，已提取 :query 按 Datalog 执行');
+            this.addQueryHistory(this.queryText);
+            const req = { method: 'POST', url: '/api/query/datalog', body: JSON.stringify({ query: extracted }) };
+            await this.run('DSL(兼容回退)', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+            return;
+          }
+
+          this.addQueryHistory(this.queryText);
+          const req = { method: 'POST', url: '/api/query/dsl', body: JSON.stringify({ query: this.queryText }) };
+          const d = await this.run('DSL', req, async () => {
+            try {
+              return await this.api(req.url, { method: 'POST', body: req.body });
+            } catch (e) {
+              const msg = String(e?.message || e || '');
+              if (!/MethodNotExist|Doesn't support name|\[object Object\]/i.test(msg)) {
+                throw e;
+              }
+
+              const fallbackReq = { method: 'POST', url: '/api/query/datalog', body: JSON.stringify({ query: this.queryText }) };
+              const data = await this.api(fallbackReq.url, { method: 'POST', body: fallbackReq.body });
+              return {
+                fallback: 'datalog',
+                note: '当前 Logseq 版本不支持 DSL API，已自动回退为 Datalog 执行',
+                data,
+              };
+            }
+          });
+
+          if (d?.fallback === 'datalog') {
+            this.showToast('DSL 不可用，已自动回退 Datalog');
+          }
+        },
+
+        async runHealth() {
+          const req = { method: 'GET', url: '/api/health' };
+          await this.run('健康检查', req, () => this.api(req.url));
+        },
+        async runGraph() {
+          const req = { method: 'GET', url: '/api/graph' };
+          await this.run('Graph信息', req, () => this.api(req.url));
+        },
+        async runGraphConfig() {
+          const req = { method: 'GET', url: '/api/graph/config' };
+          await this.run('用户配置', req, () => this.api(req.url));
+        },
+        async runGraphAppInfo() {
+          const req = { method: 'GET', url: '/api/graph/app-info' };
+          await this.run('App信息', req, () => this.api(req.url));
+        },
+        async runGraphUserInfo() {
+          const req = { method: 'GET', url: '/api/graph/user-info' };
+          await this.run('用户信息', req, () => this.api(req.url));
+        },
+        async runGraphCurrentConfig() {
+          const req = { method: 'GET', url: '/api/graph/current-config' };
+          await this.run('图谱配置', req, () => this.api(req.url));
+        },
+        async runGraphFavorites() {
+          const req = { method: 'GET', url: '/api/graph/favorites' };
+          await this.run('图谱收藏', req, () => this.api(req.url));
+        },
+        async runGraphRecent() {
+          const req = { method: 'GET', url: '/api/graph/recent' };
+          await this.run('最近访问', req, () => this.api(req.url));
+        },
+        async runGraphTemplates() {
+          const req = { method: 'GET', url: '/api/graph/templates' };
+          await this.run('图谱模板', req, () => this.api(req.url));
+        },
+        async runGraphStateGet() {
+          if (!this.graphState.key) { this.print('请输入 state key'); return; }
+          const req = { method: 'GET', url: '/api/graph/state?key=' + encodeURIComponent(this.graphState.key) };
+          await this.run('读取状态', req, () => this.api(req.url));
+        },
+        async runGraphStateSet() {
+          if (!this.graphState.key) { this.print('请输入 state key'); return; }
+          let value = this.graphState.value;
+          try {
+            value = JSON.parse(this.graphState.value);
+          } catch (_) { }
+          const req = {
+            method: 'POST',
+            url: '/api/graph/state',
+            body: JSON.stringify({ key: this.graphState.key, value }),
+          };
+          await this.run('写入状态', req, () => this.api(req.url, { method: 'POST', body: req.body }));
+        },
+      };
+    }
+  </script>
+</body>
+
+</html>

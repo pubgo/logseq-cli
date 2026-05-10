@@ -1,0 +1,21 @@
+你可以把下面这段作为“用户给 LLM 的第一句话”直接使用：
+
+请先完成 logseq MCP 会话预检，然后给我一个只读摘要：
+1) 先执行 `logseq capabilities get`，判断 dsl/search/tags/refs/state 可用性。
+2) 执行 `logseq search-notes "logseq" --limit 5`，给出前 5 条结果摘要。
+3) 执行 `logseq page get-context "logseq" --max-blocks 20 --max-depth 3 --include-properties false`，输出页面结构概览。
+4) 不做任何真实写入；如果需要写入建议，先给 dry-run 命令。
+
+输出要求：
+- 先用 3~6 条要点总结现状。
+- 若能力受限（如 dsl 不可用），明确写出回退策略。
+- 若发现风险操作，必须标注“需确认后执行”。
+
+---
+
+可选第二句话（当你确认开始写入时）：
+
+请仅做预演，不落盘：
+- `logseq page append-safe "logseq" "llm dry-run note" --dry-run`
+- `logseq block delete-safe <uuid> --dry-run`
+并说明每条命令实际会改动什么。

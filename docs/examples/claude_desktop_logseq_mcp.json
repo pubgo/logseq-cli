@@ -1,0 +1,18 @@
+{
+    "mcpServers": {
+        "logseq": {
+            "command": "/ABSOLUTE/PATH/TO/logseq-cli/bin/logseq",
+            "args": [
+                "mcp",
+                "serve",
+                "--transport",
+                "stdio"
+            ],
+            "env": {
+                "LOGSEQ_API_TOKEN": "YOUR_LOGSEQ_TOKEN",
+                "LOGSEQ_HOST": "127.0.0.1",
+                "LOGSEQ_PORT": "12315"
+            }
+        }
+    }
+}
