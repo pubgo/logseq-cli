@@ -31,6 +31,10 @@ type capabilitiesData struct {
 		Search          capabilityProbe `json:"search"`
 		TagsList        capabilityProbe `json:"tags_list"`
 		StateStore      capabilityProbe `json:"state_store"`
+		AppInfo         capabilityProbe `json:"app_info"`
+		TagSearch       capabilityProbe `json:"tag_search"`
+		PropertyList    capabilityProbe `json:"property_list"`
+		PropertyGet     capabilityProbe `json:"property_get"`
 	} `json:"api"`
 	Graph struct {
 		DBGraph               capabilityProbe `json:"db_graph"`
@@ -120,6 +124,14 @@ func probeCapabilities(ctx context.Context) *capabilitiesResult {
 	} else {
 		out.Data.API.StateStore = capabilityProbe{Supported: true}
 	}
+
+	// API: app info (probe raw method, not GetInfo fallback)
+	out.Data.API.AppInfo = probeMethodAvailability(ctx, client, "logseq.App.getInfo")
+
+	// API: optional capabilities frequently affected by graph mode/version
+	out.Data.API.TagSearch = probeMethodAvailability(ctx, client, "logseq.Editor.getTagsByName", "golang")
+	out.Data.API.PropertyList = probeMethodAvailability(ctx, client, "logseq.Editor.getAllProperties")
+	out.Data.API.PropertyGet = probeMethodAvailability(ctx, client, "logseq.Editor.getProperty", "public")
 
 	// Graph: basic connectivity
 	if _, err := client.GetCurrentGraph(ctx); err != nil {
@@ -248,6 +260,21 @@ func shortErr(err error) string {
 		return msg[:180] + "..."
 	}
 	return msg
+}
+
+func probeMethodAvailability(ctx context.Context, client *logseq.Client, method string, args ...any) capabilityProbe {
+	_, err := client.CallAPI(ctx, method, args...)
+	if err == nil {
+		return capabilityProbe{Supported: true}
+	}
+
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "methodnotexist") || strings.Contains(msg, "doesn't support name") {
+		return capabilityProbe{Supported: false, Reason: shortErr(err)}
+	}
+
+	// Non-MethodNotExist usually means the method exists but current args/context are not ideal.
+	return capabilityProbe{Supported: true, Reason: shortErr(err)}
 }
 
 func envBoolOrDefault(key string, def bool) bool {

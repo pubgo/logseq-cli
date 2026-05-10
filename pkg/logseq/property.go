@@ -37,7 +37,11 @@ func (c *Client) getAllPropertiesFallback(ctx context.Context) ([]Page, error) {
 
 // GetProperty returns a property entity by key.
 func (c *Client) GetProperty(ctx context.Context, key string) (any, error) {
-	return decode[any](c.CallAPI(ctx, "logseq.Editor.getProperty", key))
+	result, err := decode[any](c.CallAPI(ctx, "logseq.Editor.getProperty", key))
+	if err != nil {
+		return nil, wrapCapabilityUnavailable("logseq.Editor.getProperty", err)
+	}
+	return result, nil
 }
 
 // UpsertProperty creates or updates property schema.
@@ -50,11 +54,15 @@ func (c *Client) UpsertProperty(ctx context.Context, key string, schema map[stri
 	if opts != nil {
 		args = append(args, opts)
 	}
-	return decode[any](c.CallAPI(ctx, "logseq.Editor.upsertProperty", args...))
+	result, err := decode[any](c.CallAPI(ctx, "logseq.Editor.upsertProperty", args...))
+	if err != nil {
+		return nil, wrapCapabilityUnavailable("logseq.Editor.upsertProperty", err)
+	}
+	return result, nil
 }
 
 // RemoveProperty removes a property schema by key.
 func (c *Client) RemoveProperty(ctx context.Context, key string) error {
 	_, err := c.CallAPI(ctx, "logseq.Editor.removeProperty", key)
-	return err
+	return wrapCapabilityUnavailable("logseq.Editor.removeProperty", err)
 }

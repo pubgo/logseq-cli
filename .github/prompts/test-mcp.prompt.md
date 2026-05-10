@@ -19,6 +19,38 @@ agent: "agent"
 5. 对于“预期限制”要标记为 ⚠️，不要误判为 ❌。
 6. **必须先完成只读测试，再进行混合测试**；若只读阶段出现 ❌，混合阶段默认跳过并先排障。
 
+## 前置步骤：工具可用性探测（新增）
+
+在正式执行前，先快速探测本轮可用的 MCP 工具集合，并生成两份列表：
+
+- `available_tools`：本轮可直接调用的工具
+- `unavailable_tools`：本轮未暴露/不可调用的工具
+
+执行策略：
+- 对 `unavailable_tools` 不做失败判定，不计入 ❌；
+- 在总表中标记为 ⚠️，备注统一写“本轮工具集未暴露”；
+- 统计时单独给出“有效测试覆盖率”（仅按 `available_tools` 计算）。
+
+## 前置步骤：Capabilities 驱动门禁（新增）
+
+在拿到 `mcp_logseq_capabilities_get` 结果后，提取并缓存以下字段作为运行时门禁：
+
+- `api.app_info.supported`
+- `api.tag_search.supported`
+- `api.property_list.supported`
+- `api.property_get.supported`
+
+动态执行规则：
+- 若上述字段为 `false`，对应测试项直接标记 ⚠️（"当前 Logseq 能力不可用"），不再执行该项、也不计入 ❌。
+- 若字段缺失（旧版 capabilities 输出），按“未知能力”处理：允许执行 1 次，失败后再判定。
+- 若 `connection_info.tokenConfigured=false`，直接判定 Phase A 阻塞。
+
+建议映射关系：
+- `graph_app-info` ← `api.app_info.supported`
+- `tag_search` ← `api.tag_search.supported`
+- `property_list` ← `api.property_list.supported`
+- `property_get/upsert/remove`（若执行）← `api.property_get.supported`
+
 ## 测试模式（完整流程）
 
 ### Phase A：只读基线测试（必跑）
@@ -29,6 +61,11 @@ agent: "agent"
 	- 若 `❌ = 0`，进入 Phase B。
 	- 若 `❌ > 0`，先输出失败归因与修复建议，再决定是否继续。
 
+补充：
+- 仅对 `available_tools` 做门禁判定；
+- 若某关键项不可用（例如 `capabilities_get`），直接判定 Phase A 阻塞。
+- 若 Capabilities 明确声明某能力不支持，则相关测试项按 ⚠️ 跳过，不作为失败。
+
 ### Phase B：混合测试（读 + 安全写）
 
 - 目标：验证关键写路径与读回一致性（优先安全写接口）。
@@ -36,6 +73,7 @@ agent: "agent"
 	- 优先 `dry-run`，再最小写入验证。
 	- 若写策略为 `read-only` 且无法提升权限，标记 ⚠️ 并跳过写入。
 	- 测试数据使用固定前缀：`mcp-test-`，便于识别与清理。
+	- 若写接口可用但被策略降级为 dry-run，记为“受策略限制通过”（⚠️，非 ❌）。
 
 建议最小写入用例（按顺序）：
 1. `mcp_logseq_page_append-safe`：
@@ -45,6 +83,10 @@ agent: "agent"
 3. `mcp_logseq_block_update`：更新刚写入的 block 内容
 4. `mcp_logseq_block_get`：读回核对内容是否一致
 5. `mcp_logseq_block_remove`：删除测试 block（若支持）
+
+注意：
+- 若 `page_append-safe` 目标页不存在，可先用 `block_append` 创建测试页后重试；
+- 若 `block_remove` 不可用，允许保留残留并记录 UUID。
 
 清理策略（best-effort）：
 - 优先删除测试 block；
@@ -56,12 +98,18 @@ agent: "agent"
 - 额外输出：
 	- 写入链路通过率（写入相关 ✅ / 总写入项）
 	- 是否存在残留测试数据
+	- 有效测试覆盖率（可用工具中已执行项 / 可用工具总数）
 
 ## 状态判定标准
 
 - ✅ 正常返回，且结果结构符合预期
 - ⚠️ 预期内限制（例如：未打开页面、未选择块、DSL 有能力限制、需要参数）
 - ❌ 异常错误（需排查，可能是 API 版本限制或 CLI 实现问题）
+
+补充判定：
+- 工具未暴露/不可调用：⚠️（不计入失败率）
+- 策略限制导致仅 dry-run：⚠️（不计入实现失败）
+- capabilities 明确不支持：⚠️（不计入实现失败）
 
 ## 测试步骤
 
@@ -139,6 +187,7 @@ agent: "agent"
 并给出总计：`✅ x / ⚠️ y / ❌ z`。
 
 额外给出：`写入链路通过率 = write_pass / write_total`（若未执行写入则写 N/A）。
+额外给出：`有效测试覆盖率 = executed_available / total_available`。
 
 #### B. 与上次结果对比
 
@@ -166,3 +215,17 @@ agent: "agent"
 - Phase A：通过 / 阻塞（原因）
 - Phase B：已执行 / 跳过（原因）
 - 清理结果：成功 / 部分成功 / 未执行
+
+#### E. 可用性探测结果（新增）
+
+- available_tools: [ ... ]
+- unavailable_tools: [ ... ]
+- 未暴露工具数量: n（这些项按 ⚠️ 记录，但不计入 ❌）
+
+#### F. Capabilities 门禁快照（新增）
+
+- api.app_info.supported: true/false
+- api.tag_search.supported: true/false
+- api.property_list.supported: true/false
+- api.property_get.supported: true/false
+- 因门禁跳过的测试项: [ ... ]

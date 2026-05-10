@@ -81,43 +81,47 @@ func (c *Client) getTagsByNameFallback(ctx context.Context, tagName string) ([]P
 
 // GetTagObjects gets tag object blocks for the given tag name.
 func (c *Client) GetTagObjects(ctx context.Context, nameOrIdent string) ([]Block, error) {
-	return decode[[]Block](c.CallAPI(ctx, "logseq.Editor.getTagObjects", nameOrIdent))
+	result, err := decode[[]Block](c.CallAPI(ctx, "logseq.Editor.getTagObjects", nameOrIdent))
+	if err != nil {
+		return nil, wrapCapabilityUnavailable("logseq.Editor.getTagObjects", err)
+	}
+	return result, nil
 }
 
 // AddTagProperty adds property relation to a tag.
 func (c *Client) AddTagProperty(ctx context.Context, tagID, propertyIDOrName string) error {
 	_, err := c.CallAPI(ctx, "logseq.Editor.addTagProperty", tagID, propertyIDOrName)
-	return err
+	return wrapCapabilityUnavailable("logseq.Editor.addTagProperty", err)
 }
 
 // RemoveTagProperty removes property relation from a tag.
 func (c *Client) RemoveTagProperty(ctx context.Context, tagID, propertyIDOrName string) error {
 	_, err := c.CallAPI(ctx, "logseq.Editor.removeTagProperty", tagID, propertyIDOrName)
-	return err
+	return wrapCapabilityUnavailable("logseq.Editor.removeTagProperty", err)
 }
 
 // AddTagExtends adds parent tag relation for a tag.
 func (c *Client) AddTagExtends(ctx context.Context, tagID, parentTagIDOrName string) error {
 	_, err := c.CallAPI(ctx, "logseq.Editor.addTagExtends", tagID, parentTagIDOrName)
-	return err
+	return wrapCapabilityUnavailable("logseq.Editor.addTagExtends", err)
 }
 
 // RemoveTagExtends removes parent tag relation for a tag.
 func (c *Client) RemoveTagExtends(ctx context.Context, tagID, parentTagIDOrName string) error {
 	_, err := c.CallAPI(ctx, "logseq.Editor.removeTagExtends", tagID, parentTagIDOrName)
-	return err
+	return wrapCapabilityUnavailable("logseq.Editor.removeTagExtends", err)
 }
 
 // AddBlockTag adds a tag to a block.
 func (c *Client) AddBlockTag(ctx context.Context, blockID, tagID string) error {
 	_, err := c.CallAPI(ctx, "logseq.Editor.addBlockTag", blockID, tagID)
-	return err
+	return wrapCapabilityUnavailable("logseq.Editor.addBlockTag", err)
 }
 
 // RemoveBlockTag removes a tag from a block.
 func (c *Client) RemoveBlockTag(ctx context.Context, blockID, tagID string) error {
 	_, err := c.CallAPI(ctx, "logseq.Editor.removeBlockTag", blockID, tagID)
-	return err
+	return wrapCapabilityUnavailable("logseq.Editor.removeBlockTag", err)
 }
 
 // GetAllTags collects all tags in current graph.

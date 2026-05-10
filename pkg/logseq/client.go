@@ -152,3 +152,18 @@ func friendlyConnectionError(err error) error {
 	}
 	return fmt.Errorf("failed to connect to Logseq: %w", err)
 }
+
+func isMethodNotExistError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "methodnotexist") || strings.Contains(msg, "doesn't support name")
+}
+
+func wrapCapabilityUnavailable(apiMethod string, err error) error {
+	if !isMethodNotExistError(err) {
+		return err
+	}
+	return fmt.Errorf("logseq api capability unavailable: %s (not supported by current Logseq HTTP API / graph mode): %w", apiMethod, err)
+}
